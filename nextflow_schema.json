@@ -1,12 +1,12 @@
 {
     "$schema": "http://json-schema.org/draft-07/schema",
     "$id": "https://raw.githubusercontent.com/./master/nextflow_schema.json",
-    "title": "epi2me-labs/wf-template",
-    "workflow_title": "Template workflow",
-    "description": "Nextflow workflow template repository.",
-    "demo_url": "https://ont-exd-int-s3-euwst1-epi2me-labs.s3.amazonaws.com/wf-template/wf-template-demo.tar.gz",
-    "aws_demo_url": "https://ont-exd-int-s3-euwst1-epi2me-labs.s3.amazonaws.com/wf-template/wf-template-demo/aws.nextflow.config",
-    "url": "https://github.com/epi2me-labs/wf-template",
+    "title": "epi2me-labs/wf-teloseq",
+    "workflow_title": "Telomere sequencing workflow",
+    "description": "A workflow to analyse telomere-enriched data generated using Oxford Nanopore’s Telo-Seq method.",
+    "demo_url": "#TODO:",
+    "aws_demo_url": "TODO:",
+    "url": "https://github.com/epi2me-labs/wf-teloseq/",
     "type": "object",
     "definitions": {
         "input": {
@@ -35,24 +35,18 @@
                     "description": "Analyse unclassified reads from input directory. By default the workflow will not process reads in the unclassified directory.",
                     "help_text": "If selected and if the input is a multiplex directory the workflow will also process the unclassified directory."
                 },
-                "watch_path": {
+                "doublestranded": {
                     "type": "boolean",
                     "default": false,
-                    "description": "Enable to continuously watch the input directory for new input files.",
-                    "help_text": "This option enables the use of Nextflow\u2019s directory watching feature to constantly monitor input directories for new files."
+                    "description": "double stranded protocol",
+                    "help_text": "If selected then the telomere reads are identified on both strands, then the second strand is reverse complemented so that all reads are orientated telomere first and pipeline continues as normal but with the other strand reads used."
                 },
-                "client_fields": {
+                "reference": {
                     "type": "string",
                     "format": "file-path",
-                    "description": "A JSON file of key value pairs to display on the report.",
-                    "help_text": "This is used to populate a table of additional information (for example, about upstream components of an assay) to the workflow report.",
-                    "hidden": true
-                },
-                "fastq_chunk": {
-                    "title": "Fastq chunk size",
-                    "type": "integer",
-                    "description": "Sets the maximum number of reads per chunk returned from the data ingress layer.",
-                    "help_text": "Default is to not chunk data and return a single FASTQ file."
+                    "pattern": "^\\S+\\.(fasta|fa|fna|faa)(\\.gz)?$",
+                    "description": "Reference genome of the sequenced sample.",
+                    "help_text": "Reference genome of the sequenced material in fasta format."
                 }
             },
             "oneOf": [
@@ -86,6 +80,32 @@
                 }
             }
         },
+        "teloseq_options": {
+            "title": "TeloSeq Options",
+            "type": "object",
+            "fa_icon": "fas fa-arrow-left",
+            "description": "Parameters modifying TeloSeq pipeline behaviour",
+            "properties": {
+                "skipmapping": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Skip mapping step for just sample only telomere length",
+                    "help_text": "If selected then the workflow will not run the mapping step but measure telomere length just on the unmapped telomere identified reads."
+                },
+                "denovo": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "create de novo reference",
+                    "help_text": "If selected then the de novo guided reference is constructed by first mapping to the default or provided reference then extracting subsets of reads for clustering, consensus and polishing. This creates a reference based upon the data to map back to and separate out the telomere reads by chromosome arm"
+                },
+                "curation": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "add manual contigs to reference",
+                    "help_text": "If selected with --curation option then these user input contigs are incorporated into the reference via mapping and error correction"
+                }
+            }
+        },
         "output": {
             "title": "Output Options",
             "type": "object",
@@ -106,7 +126,50 @@
             "fa_icon": "far fa-question-circle",
             "description": "Advanced options for configuring processes inside the workflow.",
             "help_text": "These advanced options do not need to be changed for typical use, but allow fine tuning of workflows for users who want more control over the workflow.",
-            "properties": {}
+            "properties": {
+                "mapq": {
+                    "type": "integer",
+                    "default": 4,
+                    "description": "mapping quality filter parameter",
+                    "help_text": "Mapping quality used to filter the bam file"
+                },
+                "read_quality": {
+                    "type": "integer",
+                    "default": 9,
+                    "description": "read quality filter parameter",
+                    "help_text": "Read quality used to filter raw reads"
+                },
+                "enzyme_cut": {
+                    "type": "string",
+                    "default": "GATATC",
+                    "description": "enzyme cut site",
+                    "help_text": "Restriction enzyme cut site used for filtering reads that are not close to this site for the strict setting"
+                },
+                "denovoRef": {
+                    "type": "string",
+                    "format": "path",
+                    "description": "de novo assembled reference from denovo route",
+                    "help_text": "If provided with curatedContigs then will incorporate both sets of contigs into one reference"
+                },
+                "cov_4cluster": {
+                    "type": "integer",
+                    "default": 7,
+                    "description": "minimum read number in clustering to produce contig, recommend 30 for 220x and 20k telomere reads and 8 for 3k telomere reads.",
+                    "help_text": "The minimum read number to be used for filtering after using the clustering algorithm"
+                },
+                "mincoverage": {
+                    "type": "integer",
+                    "default": -1,
+                    "description": "minimum read number for coverage of reference contig, default is 20% of telomere read average for 92 chr arms",
+                    "help_text": "The minimum telomere coverage of chromosome arms to be taken to the final results and plots is calculated as 20% of the average chr arm coverage but can be overridden by giving a value here"
+                },
+                "curatedContigs": {
+                    "type": "string",
+                    "format": "path",
+                    "description": "manually selected contigs to add to reference",
+                    "help_text": "If provided with denovoRef then will incorporate both sets of contigs into one reference"
+                }
+            }
         },
         "misc": {
             "title": "Miscellaneous Options",
@@ -144,6 +207,9 @@
             "$ref": "#/definitions/samples"
         },
         {
+            "$ref": "#/definitions/teloseq_options"
+        },
+        {
             "$ref": "#/definitions/output"
         },
         {
@@ -175,14 +241,14 @@
     },
     "resources": {
         "recommended": {
-            "cpus": 2,
-            "memory": "2GB"
+            "cpus": 16,
+            "memory": "32GB"
         },
         "minimum": {
-            "cpus": 2,
-            "memory": "2GB"
+            "cpus": 8,
+            "memory": "16GB"
         },
-        "run_time": "5 minutes per sample",
-        "arm_support": true 
+        "run_time": "5/15/30 minutes per sample for pathway 1/2/3",
+        "arm_support": false
     }
 }
