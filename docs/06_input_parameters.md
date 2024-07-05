@@ -5,8 +5,8 @@
 | fastq | string | FASTQ files to use in the analysis. | This accepts one of three cases: (i) the path to a single FASTQ file; (ii) the path to a top-level directory containing FASTQ files; (iii) the path to a directory containing one level of sub-directories which in turn contain FASTQ files. In the first and second case, a sample name can be supplied with `--sample`. In the last case, the data is assumed to be multiplexed with the names of the sub-directories as barcodes. In this case, a sample sheet can be provided with `--sample_sheet`. |  |
 | bam | string | BAM or unaligned BAM (uBAM) files to use in the analysis. | This accepts one of three cases: (i) the path to a single BAM file; (ii) the path to a top-level directory containing BAM files; (iii) the path to a directory containing one level of sub-directories which in turn contain BAM files. In the first and second case, a sample name can be supplied with `--sample`. In the last case, the data is assumed to be multiplexed with the names of the sub-directories as barcodes. In this case, a sample sheet can be provided with `--sample_sheet`. |  |
 | analyse_unclassified | boolean | Analyse unclassified reads from input directory. By default the workflow will not process reads in the unclassified directory. | If selected and if the input is a multiplex directory the workflow will also process the unclassified directory. | False |
-| watch_path | boolean | Enable to continuously watch the input directory for new input files. | This option enables the use of Nextflow’s directory watching feature to constantly monitor input directories for new files. | False |
-| fastq_chunk | integer | Sets the maximum number of reads per chunk returned from the data ingress layer. | Default is to not chunk data and return a single FASTQ file. |  |
+| doublestranded | boolean | double stranded protocol | If selected then the telomere reads are identified on both strands, then the second strand is reverse complemented so that all reads are orientated telomere first and pipeline continues as normal but with the other strand reads used. | False |
+| reference | string | Reference genome of the sequenced sample. | Reference genome of the sequenced material in fasta format. |  |
 
 
 ### Sample Options
@@ -17,10 +17,32 @@
 | sample | string | A single sample name for non-multiplexed data. Permissible if passing a single .fastq(.gz) file or directory of .fastq(.gz) files. |  |  |
 
 
+### TeloSeq Options
+
+| Nextflow parameter name  | Type | Description | Help | Default |
+|--------------------------|------|-------------|------|---------|
+| skipmapping | boolean | Skip mapping step for just sample only telomere length | If selected then the workflow will not run the mapping step but measure telomere length just on the unmapped telomere identified reads. | False |
+| denovo | boolean | create de novo reference | If selected then the de novo guided reference is constructed by first mapping to the default or provided reference then extracting subsets of reads for clustering, consensus and polishing. This creates a reference based upon the data to map back to and separate out the telomere reads by chromosome arm | False |
+| curation | boolean | add manual contigs to reference | If selected with --curation option then these user input contigs are incorporated into the reference via mapping and error correction | False |
+
+
 ### Output Options
 
 | Nextflow parameter name  | Type | Description | Help | Default |
 |--------------------------|------|-------------|------|---------|
 | out_dir | string | Directory for output of all workflow results. |  | output |
+
+
+### Advanced Options
+
+| Nextflow parameter name  | Type | Description | Help | Default |
+|--------------------------|------|-------------|------|---------|
+| mapq | integer | mapping quality filter parameter | Mapping quality used to filter the bam file | 4 |
+| read_quality | integer | read quality filter parameter | Read quality used to filter raw reads | 9 |
+| enzyme_cut | string | enzyme cut site | Restriction enzyme cut site used for filtering reads that are not close to this site for the strict setting | GATATC |
+| denovoRef | string | de novo assembled reference from denovo route | If provided with curatedContigs then will incorporate both sets of contigs into one reference |  |
+| cov_4cluster | integer | minimum read number in clustering to produce contig, recommend 30 for 220x and 20k telomere reads and 8 for 3k telomere reads. | The minimum read number to be used for filtering after using the clustering algorithm | 7 |
+| mincoverage | integer | minimum read number for coverage of reference contig, default is 20% of telomere read average for 92 chr arms | The minimum telomere coverage of chromosome arms to be taken to the final results and plots is calculated as 20% of the average chr arm coverage but can be overridden by giving a value here | -1 |
+| curatedContigs | string | manually selected contigs to add to reference | If provided with denovoRef then will incorporate both sets of contigs into one reference |  |
 
 

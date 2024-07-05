@@ -1,1 +1,1 @@
-Nextflow workflow template repository.
+A workflow to analyse telomere-enriched data generated using Oxford Nanopore’s Telo-Seq method.

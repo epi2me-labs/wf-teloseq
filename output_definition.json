@@ -1,7 +1,7 @@
 {
   "files": {
     "workflow-report": {
-      "filepath": "./wf-template-report.html",
+      "filepath": "./wf-teloseq-report.html",
       "title": "workflow report",
       "description": "Report for all samples",
       "mime-type": "text/html",
