@@ -20,7 +20,7 @@ docker-run:
     matrix:
       - MATRIX_NAME: [
           "defaults",
-          "curation",
+          "skipmapping",
         ]
   rules:
     # NOTE As we're overriding the rules block for the included docker-run
@@ -31,13 +31,8 @@ docker-run:
     - if: $MATRIX_NAME == "defaults"
       variables:
         # use default args defined above
-        NF_IGNORE_PROCESSES: clusterAndExtractR1,clusterAndExtractR2,clusterAndExtractR3,combinefastq,combineRefR1,combineRefR2,combineRefR3,filter_telomeres2,manualCuration,mapAndSeparateR1,mapAndSeparateR2,mapAndSeparateR3,reversecomplement,rmdup2
-    - if: $MATRIX_NAME == "curation"
+        NF_IGNORE_PROCESSES: combinefastq,filter_telomeres2,reversecomplement,rmdup2
+    - if: $MATRIX_NAME == "skipmapping"
       variables:
-        NF_WORKFLOW_OPTS: >
-          --fastq test_data/HG002_3k_test_de_novo_data.fastq.gz
-          --denovoRef test_data/HG002qpMP_reference_denovo.fasta
-          --curation
-          --curatedContigs test_data/manual_contigs.fasta
-        NF_IGNORE_PROCESSES: clusterAndExtractR1,clusterAndExtractR2,clusterAndExtractR3,combinefastq,combineRefR1,combineRefR2,combineRefR3,filter_telomeres2,mapAndSeparateR1,mapAndSeparateR2,mapAndSeparateR3,reversecomplement,rmdup2
-
+        NF_WORKFLOW_OPTS: "--fastq test_data/HG002_small_test.fastq.gz --skipmapping"
+        NF_IGNORE_PROCESSES: check_reference,combinefastq,cut_sites,filtering,filter_telomeres2,mappingbam,results,reversecomplement,rmdup2,telomere_sites

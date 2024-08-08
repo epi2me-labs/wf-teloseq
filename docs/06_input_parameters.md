@@ -22,8 +22,6 @@
 | Nextflow parameter name  | Type | Description | Help | Default |
 |--------------------------|------|-------------|------|---------|
 | skipmapping | boolean | Skip mapping step for just sample only telomere length | If selected then the workflow will not run the mapping step but measure telomere length just on the unmapped telomere identified reads. | False |
-| denovo | boolean | create de novo reference | If selected then the de novo guided reference is constructed by first mapping to the default or provided reference then extracting subsets of reads for clustering, consensus and polishing. This creates a reference based upon the data to map back to and separate out the telomere reads by chromosome arm | False |
-| curation | boolean | add manual contigs to reference | If selected with --curation option then these user input contigs are incorporated into the reference via mapping and error correction | False |
 
 
 ### Output Options
@@ -43,10 +41,8 @@
 | filter_error_motifs_window_size | integer | Size of window for filtering based on telomere error motifs. | If more than `--filter_error_motifs_max_count` telomere error motifs are found within a window of this length in the telomeric region of a read, it is dropped from the analysis. | 500 |
 | mapq | integer | mapping quality filter parameter | Mapping quality used to filter the bam file | 4 |
 | read_quality | integer | read quality filter parameter | Read quality used to filter raw reads | 9 |
-| enzyme_cut | string | enzyme cut site | Restriction enzyme cut site used for filtering reads that are not close to this site for the strict setting | GATATC |
-| denovoRef | string | de novo assembled reference from denovo route | If provided with curatedContigs then will incorporate both sets of contigs into one reference |  |
+| restriction_site | string | enzyme cut site | Restriction enzyme cut site used for filtering reads that are not close to this site for the strict setting | GATATC |
 | cov_4cluster | integer | minimum read number in clustering to produce contig, recommend 30 for 220x and 20k telomere reads and 8 for 3k telomere reads. | The minimum read number to be used for filtering after using the clustering algorithm | 7 |
 | mincoverage | integer | minimum read number for coverage of reference contig, default is 20% of telomere read average for 92 chr arms | The minimum telomere coverage of chromosome arms to be taken to the final results and plots is calculated as 20% of the average chr arm coverage but can be overridden by giving a value here | -1 |
-| curatedContigs | string | manually selected contigs to add to reference | If provided with denovoRef then will incorporate both sets of contigs into one reference |  |
 
 
