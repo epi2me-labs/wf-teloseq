@@ -309,7 +309,7 @@ def main(args):
                     df = pd.read_csv(files["rawlen"], sep=",", header=0)
                     create_boxplot(
                         df,
-                        'Telomere_length2',
+                        'Telomere_length',
                         "unmapped_filters_boxplot.html",
                         "Unmapped: No Filters")
 
@@ -387,27 +387,27 @@ def main(args):
                     with Grid():
                         df = pd.read_csv(files["rawlen"], sep=",", header=0)
                         create_boxplot(
-                            df, 'Telomere_length2',
+                            df, 'Telomere_length',
                             "unmapped_filters_boxplot.html",
                             "Unmapped: Raw reads"
                         )
 
                         df1 = pd.read_csv(files["none"], sep=",", header=0)
                         create_boxplot(
-                            df1, 'Telomere_length2',
+                            df1, 'Telomere_length',
                             "no_filters_boxplot.html", "Mapped: No Filters"
                         )
 
                         df2 = pd.read_csv(files["lenient"], sep=",", header=0)
                         create_boxplot(
-                            df2, 'Telomere_length2',
+                            df2, 'Telomere_length',
                             "Lenient_filters_boxplot.html",
                             "Mapped: Lenient"
                         )
 
                         df3 = pd.read_csv(files["strict"], sep=",", header=0)
                         create_boxplot(
-                            df3, 'Telomere_length2',
+                            df3, 'Telomere_length',
                             "Strict_filters_boxplot.html", "Mapped: Strict"
                         )
 
@@ -432,7 +432,7 @@ def main(args):
                                         chromosome (Strict Filters)"):
                         df3 = pd.read_csv(files["strict"], sep=",", header=0)
                         create_chrboxplot(
-                            df3, 'Ref', 'Telomere_length2',
+                            df3, 'Ref', 'Telomere_length',
                             "Chromosome_strict_boxplot.html",
                             "Chromosome: Strict Filters"
                         )
@@ -440,7 +440,7 @@ def main(args):
                                         (Lenient Filters)"):
                         df3 = pd.read_csv(files["lenient"], sep=",", header=0)
                         create_chrboxplot(
-                            df3, 'Ref', 'Telomere_length2',
+                            df3, 'Ref', 'Telomere_length',
                             "Chromosome_lenient_boxplot.html",
                             "Chromosome: Lenient Filters"
                         )

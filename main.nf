@@ -52,8 +52,7 @@ process manualCuration {
         tuple val(meta), path("Manual_denovo_reference.fasta"), emit: ref1
     script:
     """
-
-    extend_telomere.py new_contigs.fasta new_contigs2.fasta
+    workflow-glue extend_telomere new_contigs.fasta TAACCC 4000 > new_contigs2.fasta
     cutadapt --cut -6 denovo_reference_round1.fasta > reference2.fasta
     cat new_contigs2.fasta reference2.fasta > reference_manual.fasta
     minimap2 -ax map-ont -t $task.cpus reference_manual.fasta reads.fastq | samtools sort -o Telomere.bam
@@ -68,18 +67,13 @@ process manualCuration {
     minimap2 -ax map-ont -t $task.cpus consensus.fasta reads.fastq | samtools sort -o Telomere2.bam
     samtools index Telomere2.bam
 
-    redundent_contig_removal_cov.py Telomere2.bam coverage.txt > idlisttoremove.txt
-    #mosdepth -n -t 8 --fast-mode lowcov2 Telomere2.bam
-    #awk -v cov="\$cov" '{if (\$4 > cov) print \$1}' lowcov2.mosdepth.summary.txt > idlisttokeep.txt
-    #awk '{if (\$4 > cov) print \$1}' lowcov2.mosdepth.summary.txt > idlisttokeep.txt
+    bamstats -f flagstat.tsv Telomere2.bam > /dev/null
+    awk -v cov=\$(cat coverage.txt) 'NR > 1 && \$3 < cov {print \$1}' flagstat.tsv \
+        > idlisttoremove.txt
     seqkit grep -v -f idlisttoremove.txt consensus.fasta > consensus_final.fasta
 
-    #cutadapt -g "TAACCCTAACCCTAACCCTAACCCTAACCC;rightmost" -e 0 -o correctedref.fasta reference_used_for_naming.fasta
-    #blast_rename_ref.py -db correctedref.fasta -q consensus_final.fasta -o Manual_denovo_reference.fasta -i ${baseDir}/test_data/HG002_groupings.csv
-    
     awk '/^>/{if(seq!=""){print seq "$enzyme"}; print; seq=""; next} {seq=seq""\$0} END{print seq "$enzyme"}' consensus_final.fasta > consensus_final2.fasta
     awk '/^>/ {print ">contig_"++i; next} {print}' consensus_final2.fasta > Manual_denovo_reference.fasta
-
     """
 }
 
@@ -185,8 +179,8 @@ process check_reference {
     cpus   = 1
     memory 2.GB
     input:
-        path(ref)
-        val(enzyme)
+        path("reference")  // can be compressed or uncompressed
+        val(enzyme_motif)
     output:
         tuple val('reference_user'), path("reference.fasta"), emit: ref1
     publishDir "${params.out_dir}/reference/", mode: 'copy', overwrite: true
@@ -197,21 +191,225 @@ process check_reference {
     ##Extending telomere to all references as observed misclassification of primary and secondary if some arms have telomeres
     ##long enough for mapping but the other similar site doesn't then that softclipping is taken into consideration
     ##and the primary can then become secondary and vice versa
-    # TODO: the python scripts should probably use `pysam` instead of `biopython` as it
-    # implicitly deals with compressed and uncompressed FASTx files
-    if [[ $ref == *.gz ]]; then
-        zcat $ref > reference.fasta 
-        extract_reference.py reference.fasta $enzyme
-        extend_telomere.py reference2.fasta reference.fasta
-    elif [[ $ref == *.fasta ]]; then
-        extract_reference.py $ref $enzyme
-        extend_telomere.py reference2.fasta reference.fasta
-    elif [[ $ref == *.fa ]]; then
-        extract_reference.py $ref $enzyme
-        extend_telomere.py reference2.fasta reference.fasta
-    else
-        pass
-    fi
+    # TODO: what does the above comment mean?
+
+    workflow-glue extract_reference \\
+        reference \\
+        TAACCCTAACCCTAACCCTAACCCTAACCCTAACCCTAACCCTAACCCTAACCCTAACCC \\
+        $enzyme_motif \\
+        300 \\
+        > extracted.fasta
+
+    # TODO: the '300' above and '4000' below should be exposed as advanced param
+    workflow-glue extend_telomere extracted.fasta TAACCC 4000 > reference.fasta
+    """
+}
+
+process clusterAndExtractR1 {
+    label "wf_teloseq"
+    cpus = 4
+    memory 2.GB
+    input:
+        tuple val(meta), path(clusterFiles), path(input)
+        val(cov)
+    output:
+        tuple val(meta), path ("${clusterFiles}.set2.consensus_highestseqs.fasta") , emit: results
+
+    script:
+    """
+    seqkit grep -f $clusterFiles $input > ${clusterFiles}.fastq
+    seqtk seq -A ${clusterFiles}.fastq > ${clusterFiles}.set2.fasta
+    vsearch --cluster_fast ${clusterFiles}.set2.fasta --strand plus --threads $task.cpus --maxseqlength 200000 --id 0.96 --consout ${clusterFiles}.set2.consensus.fasta
+
+    workflow-glue extract_highest_seqs ${clusterFiles}.set2.consensus.fasta $cov \
+        > ${clusterFiles}.set2.consensus_highestseqs.fasta
+    """
+}
+
+process clusterAndExtractR2 {
+    // TODO: instead of duplicating these processes, they could be defined in a separate
+    // `.nf` file and imported several times
+    label "wf_teloseq"
+    cpus = 4
+    memory 2.GB
+    input:
+        tuple val(meta), path(clusterFiles), path(input)
+        val(cov)
+    output:
+        tuple val(meta), path ("${clusterFiles}.set2.consensus_highestseqs.fasta") , emit: results
+    script:
+    """
+    seqkit grep -f $clusterFiles $input > ${clusterFiles}.fastq
+    seqtk seq -A ${clusterFiles}.fastq > ${clusterFiles}.set2.fasta
+
+    vsearch --cluster_fast ${clusterFiles}.set2.fasta --strand plus --threads $task.cpus --maxseqlength 200000 --id 0.96 --consout ${clusterFiles}.set2.consensus.fasta
+
+    workflow-glue extract_highest_seqs ${clusterFiles}.set2.consensus.fasta $cov \
+        > ${clusterFiles}.set2.consensus_highestseqs.fasta
+    """
+}
+
+process clusterAndExtractR3 {
+    label "wf_teloseq"
+    cpus = 4
+    memory 2.GB
+    input:
+        tuple val(meta), path(clusterFiles), path(input)
+        val(cov)
+    output:
+        tuple val(meta), path ("${clusterFiles}.set2.consensus_highestseqs.fasta") , emit: results
+    script:
+    """
+    seqkit grep -f $clusterFiles $input > ${clusterFiles}.fastq
+    seqtk seq -A ${clusterFiles}.fastq > ${clusterFiles}.set2.fasta
+
+    vsearch --cluster_fast ${clusterFiles}.set2.fasta --strand plus --threads $task.cpus --maxseqlength 200000 --id 0.96 --consout ${clusterFiles}.set2.consensus.fasta
+
+    workflow-glue extract_highest_seqs ${clusterFiles}.set2.consensus.fasta $cov \
+        > ${clusterFiles}.set2.consensus_highestseqs.fasta
+    """
+}
+
+process combineRefR1 {
+    label "wf_teloseq"
+    cpus = 6
+    memory 8.GB
+    input:
+        tuple val(meta), path(input), path(resultFiles)
+        val(cov)
+    output:
+        tuple val(meta), path("denovo_reference.fasta"), emit: ref1
+        tuple val(meta), path("cutsites.bed"), emit: cutbed
+        tuple val(meta), path("Telomere2.bam"), path("Telomere2.bam.bai"), emit: bam
+    """
+    cat $resultFiles | workflow-glue deduplicate > new.fasta
+
+    #trim all reads to TAACCC then add 5kbp of telomere
+    workflow-glue extend_telomere new.fasta TAACCC 4000 > new2.fasta
+
+    #map back original reads to polish 1|1 snp/indels
+    minimap2 -ax map-ont -t $task.cpus new2.fasta $input | samtools sort -o Telomere.bam
+    samtools index Telomere.bam
+    samtools faidx new2.fasta
+    freebayes -f new2.fasta Telomere.bam >varnew.vcf
+
+    #script to filter but subset based upon coverage
+    workflow-glue correct varnew.vcf new2.fasta predenovo_reference_temp.fasta
+    cat predenovo_reference_temp.fasta | workflow-glue deduplicate > predenovo_reference.fasta
+    minimap2 -ax map-ont -t $task.cpus predenovo_reference.fasta $input | samtools sort -o Telomere2.bam
+    samtools index Telomere2.bam
+
+    bamstats -f flagstat.tsv Telomere2.bam > /dev/null
+    csvtk -t filter2 -f '\$primary < $cov' flagstat.tsv > idlisttoremove.txt
+    seqkit grep -v -f idlisttoremove.txt predenovo_reference.fasta > denovo_reference.fasta
+    samtools faidx denovo_reference.fasta
+    awk '{print \$1"\t"\$2"\t"\$2}' denovo_reference.fasta.fai > cutsites.bed
+    """
+}
+
+process combineRefR2 {
+    label "wf_teloseq"
+    cpus = 6
+    memory 8.GB
+    input:
+        tuple val(meta), path(input), path(resultFiles), path(ref), path("coverage.txt")
+        tuple val(meta2), path("ref_original.fasta")
+        val(enzyme)
+    output:
+        tuple val(meta), path("denovo_reference.fasta"), emit: ref1
+        tuple val(meta), path("cutsites.bed"), emit: cutbed
+        tuple val(meta), path("Raw_read.bam"), path("Raw_read.bam.bai"), emit: bam
+    """
+    cat $resultFiles > tmpref.fa
+    workflow-glue extend_telomere tmpref.fa TAACCC 4000 > tmpref2.fa
+    cat $ref tmpref2.fa > new2.fasta
+
+    #map back original reads to polish 1|1 snp/indels
+    minimap2 -ax map-ont -t $task.cpus new2.fasta $input | samtools sort -o Telomere.bam
+    samtools index Telomere.bam
+    samtools faidx new2.fasta
+
+    #SHOULD I BE FILTERING BAM BEFORE THIS STAGE TO REMOVE LOW CONFIDENCE MAPPING?
+    freebayes -f new2.fasta Telomere.bam >varnew.vcf
+
+    #script to correct snp/indels in reference
+    workflow-glue correct varnew.vcf new2.fasta predenovo_reference_temp.fasta
+
+    #remove duplicate contigs using sequence that have come about by error in clustering contigs that already exist. Ignore first 80bp when comparing sequences
+    cat predenovo_reference_temp.fasta | workflow-glue deduplicate > predenovo_reference.fasta
+
+    #map again
+    minimap2 -ax map-ont -t $task.cpus predenovo_reference.fasta $input | samtools sort -o Raw_read.bam
+    samtools index Raw_read.bam
+
+    #remove duplicate contigs using coverage that have come about by error in clustering contigs that already exist
+    bamstats -f flagstat.tsv Raw_read.bam > /dev/null
+    awk -v cov=\$(cat coverage.txt) 'NR > 1 && \$3 < cov {print \$1}' flagstat.tsv \
+        > idlisttoremove.txt
+    seqkit grep -v -f idlisttoremove.txt predenovo_reference.fasta > denovo_reference2.fasta
+
+    #Add lost cut site for future pipeline use to end of contigs
+    awk '/^>/{if(seq!=""){print seq "$enzyme"}; print; seq=""; next} {seq=seq""\$0} END{print seq "$enzyme"}' denovo_reference2.fasta > denovo_reference3.fasta
+
+    #rename contigs ADD WITH CHR NAMING IN FUTURE
+    awk '/^>/ {print ">contig_"++i; next} {print}' denovo_reference3.fasta > denovo_reference.fasta
+
+    #create cutsites file showing where reads should map up to for later use
+    samtools faidx denovo_reference.fasta
+    awk '{print \$1"\t"\$2"\t"\$2}' denovo_reference.fasta.fai > cutsites.bed
+    """
+}
+
+//combineRefR3
+process combineRefR3 {
+    label "wf_teloseq"
+    cpus = 6
+    memory 8.GB
+    input: 
+        tuple val(meta), path(input), path(resultFiles), path(ref), path("coverage.txt")
+        tuple val(meta2), path("ref_original.fasta")
+        val(enzyme)
+    output:
+        tuple val(meta), path("denovo_reference.fasta"), emit: ref1
+        tuple val(meta), path("cutsites.bed"), emit: cutbed
+        tuple val(meta), path("Raw_read.bam"), path("Raw_read.bam.bai"), emit: bam
+    """
+    cat $resultFiles > tmpref.fa
+    workflow-glue extend_telomere tmpref.fa TAACCC 4000 > tmpref2.fa
+    cat $ref tmpref2.fa > new2.fasta
+
+    #map back original reads to polish 1|1 snp/indels
+    minimap2 -ax map-ont -t $task.cpus new2.fasta $input | samtools sort -o Telomere.bam
+    samtools index Telomere.bam
+    samtools faidx new2.fasta
+
+    freebayes -f new2.fasta Telomere.bam >varnew.vcf
+
+    #script to correct snp/indels in reference
+    workflow-glue correct varnew.vcf new2.fasta predenovo_reference_temp.fasta
+
+    #remove duplicate contigs using sequence that have come about by error in clustering contigs that already exist. Ignore first 80bp when comparing sequences
+    cat predenovo_reference_temp.fasta | workflow-glue deduplicate > predenovo_reference.fasta
+
+    #map again
+    minimap2 -ax map-ont -t $task.cpus predenovo_reference.fasta $input | samtools sort -o Raw_read.bam
+    samtools index Raw_read.bam
+
+    #remove duplicate contigs using coverage that have come about by error in clustering contigs that already exist
+    bamstats -f flagstat.tsv Raw_read.bam > /dev/null
+    awk -v cov=\$(cat coverage.txt) 'NR > 1 && \$3 < cov {print \$1}' flagstat.tsv \
+        > idlisttoremove.txt
+    seqkit grep -v -f idlisttoremove.txt predenovo_reference.fasta > denovo_reference2.fasta
+
+    #Add lost cut site for future pipeline use to end of contigs
+    awk '/^>/{if(seq!=""){print seq "$enzyme"}; print; seq=""; next} {seq=seq""\$0} END{print seq "$enzyme"}' denovo_reference2.fasta > denovo_reference3.fasta
+
+    #rename contigs ADD WITH CHR NAMING IN FUTURE
+    awk '/^>/ {print ">contig_"++i; next} {print}' denovo_reference3.fasta > denovo_reference.fasta
+
+    #create cutsites file showing where reads should map up to for later use
+    samtools faidx denovo_reference.fasta
+    awk '{print \$1"\t"\$2"\t"\$2}' denovo_reference.fasta.fai > cutsites.bed
     """
 }
 
@@ -245,210 +443,7 @@ process mapAndSeparateR1 {
     #summarise per read the repeating motif number
     tail -n +2 alignment.motif | cut -f1 | sort | uniq -c | awk '{print \$2 "\t" \$1}' > alignment.motifcounts
     #separate out mismapped reads, commented out left clip separation in this script as only useful in high coverage situations
-    clustera.py alignmentseqkit alignment.motifcounts $cov
-    """
-}
-
-process clusterAndExtractR1 {
-    label "wf_teloseq"
-    cpus = 4
-    memory 2.GB
-    input:
-        tuple val(meta), path(clusterFiles), path(input)
-        val(cov)
-    output:
-        tuple val(meta), path ("${clusterFiles}.set2.consensus_highestseqs.fasta") , emit: results
-
-    script:
-    """
-    seqkit grep -f $clusterFiles $input > ${clusterFiles}.fastq
-    seqtk seq -A ${clusterFiles}.fastq > ${clusterFiles}.set2.fasta
-    vsearch --cluster_fast ${clusterFiles}.set2.fasta --strand plus --threads $task.cpus --maxseqlength 200000 --id 0.96 --consout ${clusterFiles}.set2.consensus.fasta
-    extract_highest_seqs.py ${clusterFiles}.set2.consensus.fasta $cov
-
-    # Check if output file is empty
-    if [ ! -s ${clusterFiles}.set2.consensus_highestseqs.fasta ]; then
-        # If empty, create an empty file
-        touch ${clusterFiles}.set2.consensus_highestseqs.fasta
-    fi
-    """
-}
-
-process clusterAndExtractR2 {
-    // TODO: instead of duplicating these processes, they could be defined in a separate
-    // `.nf` file and imported several times
-    label "wf_teloseq"
-    cpus = 4
-    memory 2.GB
-    input:
-        tuple val(meta), path(clusterFiles), path(input)
-        val(cov)
-    output:
-        tuple val(meta), path ("${clusterFiles}.set2.consensus_highestseqs.fasta") , emit: results
-    script:
-    """
-    seqkit grep -f $clusterFiles $input > ${clusterFiles}.fastq
-    seqtk seq -A ${clusterFiles}.fastq > ${clusterFiles}.set2.fasta
-    # --cluster_fast removed to reduce possibility of redundent contigs
-    vsearch --cluster_fast ${clusterFiles}.set2.fasta --strand plus --threads $task.cpus --maxseqlength 200000 --id 0.96 --consout ${clusterFiles}.set2.consensus.fasta
-    extract_highest_seqs.py ${clusterFiles}.set2.consensus.fasta $cov
-
-    # Check if output file is empty
-    if [ ! -s ${clusterFiles}.set2.consensus_highestseqs.fasta ]; then
-        # If empty, create an empty file
-        touch ${clusterFiles}.set2.consensus_highestseqs.fasta
-    fi
-    """
-}
-
-process clusterAndExtractR3 {
-    label "wf_teloseq"
-    cpus = 4
-    memory 2.GB
-    input:
-        tuple val(meta), path(clusterFiles), path(input)
-        val(cov)
-        
-    output:
-        tuple val(meta), path ("${clusterFiles}.set2.consensus_highestseqs.fasta") , emit: results
-    script:
-    """
-    seqkit grep -f $clusterFiles $input > ${clusterFiles}.fastq
-    seqtk seq -A ${clusterFiles}.fastq > ${clusterFiles}.set2.fasta
-    # --cluster_fast removed to reduce possibility of redundent contigs
-    vsearch --cluster_fast ${clusterFiles}.set2.fasta --strand plus --threads $task.cpus --maxseqlength 200000 --id 0.96 --consout ${clusterFiles}.set2.consensus.fasta
-    extract_highest_seqs.py ${clusterFiles}.set2.consensus.fasta $cov
-
-    # Check if output file is empty
-    if [ ! -s ${clusterFiles}.set2.consensus_highestseqs.fasta ]; then
-        # If empty, create an empty file
-        touch ${clusterFiles}.set2.consensus_highestseqs.fasta
-    fi
-    """
-}
-
-process combineRefR1 {
-    label "wf_teloseq"
-    cpus = 6
-    memory 8.GB
-    input: 
-        tuple val(meta), path(input), path(resultFiles)
-        val(cov)
-    output:
-        tuple val(meta), path("denovo_reference.fasta"), emit: ref1
-        tuple val(meta), path("cutsites.bed"), emit: cutbed
-        tuple val(meta), path("Telomere2.bam"), path("Telomere2.bam.bai"), emit: bam
-    """
-    cat $resultFiles | deduplicate.py new.fasta
-    #trim all reads to TAACCC then add 5kbp of telomere
-    extend_telomere.py new.fasta new2.fasta
-    #map back original reads to polish 1|1 snp/indels
-    minimap2 -ax map-ont -t $task.cpus new2.fasta $input | samtools sort -o Telomere.bam
-    samtools index Telomere.bam
-    samtools faidx new2.fasta
-    freebayes -f new2.fasta Telomere.bam >varnew.vcf
-    #script to filter but subset based upon coverage
-    correct.py varnew.vcf new2.fasta predenovo_reference_temp.fasta
-    cat predenovo_reference_temp.fasta | deduplicate.py predenovo_reference.fasta
-    minimap2 -ax map-ont -t $task.cpus predenovo_reference.fasta $input | samtools sort -o Telomere2.bam
-    samtools index Telomere2.bam
-
-    redundent_contig_removal.py Telomere2.bam $cov > idlisttoremove.txt
-    seqkit grep -v -f idlisttoremove.txt predenovo_reference.fasta > denovo_reference.fasta
-    samtools faidx denovo_reference.fasta
-    awk '{print \$1"\t"\$2"\t"\$2}' denovo_reference.fasta.fai > cutsites.bed
-    """
-}
-
-process combineRefR2 {
-    label "wf_teloseq"
-    cpus = 6
-    memory 8.GB
-    input:
-        tuple val(meta), path(input), path(resultFiles), path(ref), path("coverage.txt")
-        tuple val(meta2), path("ref_original.fasta")
-        val(enzyme)
-    output:
-        tuple val(meta), path("denovo_reference.fasta"), emit: ref1
-        tuple val(meta), path("cutsites.bed"), emit: cutbed
-        tuple val(meta), path("Raw_read.bam"), path("Raw_read.bam.bai"), emit: bam
-    """
-    cat $resultFiles > tmpref.fa
-    extend_telomere.py tmpref.fa tmpref2.fa
-    cat $ref tmpref2.fa > new2.fasta
-    #map back original reads to polish 1|1 snp/indels
-    minimap2 -ax map-ont -t $task.cpus new2.fasta $input | samtools sort -o Telomere.bam
-    samtools index Telomere.bam
-    samtools faidx new2.fasta
-    #SHOULD I BE FILTERING BAM BEFORE THIS STAGE TO REMOVE LOW CONFIDENCE MAPPING?
-    freebayes -f new2.fasta Telomere.bam >varnew.vcf
-    #script to correct snp/indels in reference
-    correct.py varnew.vcf new2.fasta predenovo_reference_temp.fasta
-    #remove duplicate contigs using sequence that have come about by error in clustering contigs that already exist. Ignore first 80bp when comparing sequences
-    cat predenovo_reference_temp.fasta | deduplicate.py predenovo_reference.fasta
-    #map again
-    minimap2 -ax map-ont -t $task.cpus predenovo_reference.fasta $input | samtools sort -o Raw_read.bam
-    samtools index Raw_read.bam
-    #remove duplicate contigs using coverage that have come about by error in clustering contigs that already exist
-    redundent_contig_removal_cov.py Raw_read.bam coverage.txt > idlisttoremove.txt
-    seqkit grep -v -f idlisttoremove.txt predenovo_reference.fasta > denovo_reference2.fasta
-
-    #Add lost cut site for future pipeline use to end of contigs
-    awk '/^>/{if(seq!=""){print seq "$enzyme"}; print; seq=""; next} {seq=seq""\$0} END{print seq "$enzyme"}' denovo_reference2.fasta > denovo_reference3.fasta
-    #rename contigs ADD WITH CHR NAMING IN FUTURE
-    awk '/^>/ {print ">contig_"++i; next} {print}' denovo_reference3.fasta > denovo_reference.fasta
-    #create cutsites file showing where reads should map up to for later use
-    samtools faidx denovo_reference.fasta
-    awk '{print \$1"\t"\$2"\t"\$2}' denovo_reference.fasta.fai > cutsites.bed
-    """
-}
-
-//combineRefR3
-process combineRefR3 {
-    label "wf_teloseq"
-    cpus = 6
-    memory 8.GB
-    input: 
-        tuple val(meta), path(input), path(resultFiles), path(ref), path("coverage.txt")
-        tuple val(meta2), path("ref_original.fasta")
-        val(enzyme)
-    output:
-        tuple val(meta), path("denovo_reference.fasta"), emit: ref1
-        tuple val(meta), path("cutsites.bed"), emit: cutbed
-        tuple val(meta), path("Raw_read.bam"), path("Raw_read.bam.bai"), emit: bam
-    """
-    cat $resultFiles > tmpref.fa
-    extend_telomere.py tmpref.fa tmpref2.fa
-    cat $ref tmpref2.fa > new2.fasta
-    #map back original reads to polish 1|1 snp/indels
-    minimap2 -ax map-ont -t $task.cpus new2.fasta $input | samtools sort -o Telomere.bam
-    samtools index Telomere.bam
-    samtools faidx new2.fasta
-
-    freebayes -f new2.fasta Telomere.bam >varnew.vcf
-    #script to correct snp/indels in reference
-    correct.py varnew.vcf new2.fasta predenovo_reference_temp.fasta
-    #remove duplicate contigs using sequence that have come about by error in clustering contigs that already exist. Ignore first 80bp when comparing sequences
-    cat predenovo_reference_temp.fasta | deduplicate.py predenovo_reference.fasta
-    #map again
-    minimap2 -ax map-ont -t $task.cpus predenovo_reference.fasta $input | samtools sort -o Raw_read.bam
-    samtools index Raw_read.bam
-    #remove duplicate contigs using coverage that have come about by error in clustering contigs that already exist
-    redundent_contig_removal_cov.py Raw_read.bam coverage.txt > idlisttoremove.txt
-    seqkit grep -v -f idlisttoremove.txt predenovo_reference.fasta > denovo_reference2.fasta
-
-    #rename final reference contigs, first remove variable regions #note could improve this further as can pair up within this naming and group further on similarity.
-    #DONT USE AT MOMENT NEEDS FURTHER WORK
-    #cutadapt -g "TAACCCTAACCCTAACCCTAACCCTAACCC;rightmost" -e 0 -o correctedref.fasta ref_original.fasta
-    #blast_rename_ref.py -db correctedref.fasta -q denovo_reference2.fasta -o denovo_reference5.fasta -i ${baseDir}/test_data/HG002_groupings.csv
-    
-    #Add lost cut site for future pipeline use to end of contigs
-    awk '/^>/{if(seq!=""){print seq "$enzyme"}; print; seq=""; next} {seq=seq""\$0} END{print seq "$enzyme"}' denovo_reference2.fasta > denovo_reference3.fasta
-    #rename contigs ADD WITH CHR NAMING IN FUTURE
-    awk '/^>/ {print ">contig_"++i; next} {print}' denovo_reference3.fasta > denovo_reference.fasta
-    #create cutsites file showing where reads should map up to for later use
-    samtools faidx denovo_reference.fasta
-    awk '{print \$1"\t"\$2"\t"\$2}' denovo_reference.fasta.fai > cutsites.bed
+    workflow-glue clustera alignmentseqkit alignment.motifcounts $cov
     """
 }
 
@@ -469,11 +464,14 @@ process mapAndSeparateR2 {
     samtools fastq alignment.bam > alignment.fastq
     #identify repeating motif but not using this now so could be removed with cluster script change...
     seqkit locate --only-positive-strand -m 0 -p CGCCGGCGCAGGCG alignment.fastq > alignment.motif
+
     #summarise per read the repeating motif number
-    indel_count.py
+    # TODO: make magic number into param
+    workflow-glue count_indels alignment.bam 9 > indel_counts.txt
     tail -n +2 alignment.motif | cut -f1 | sort | uniq -c | awk '{print \$2 "\t" \$1}' > alignment.motifcounts
+
     #separate out mismapped reads using just motif and pos
-    cluster2b.py alignmentseqkit alignment.motifcounts $cov indel_counts.txt
+    workflow-glue cluster2b alignmentseqkit alignment.motifcounts indel_counts.txt $cov
     """
 }
 
@@ -495,11 +493,14 @@ process mapAndSeparateR3 {
     samtools fastq alignment.bam > alignment.fastq
     #identify repeating motif but not using this now so could be removed with cluster script change...
     seqkit locate --only-positive-strand -m 0 -p CGCCGGCGCAGGCG alignment.fastq > alignment.motif
+
     #summarise per read the repeating motif number
-    indel_count.py
+    # TODO: make magic number into param
+    workflow-glue count_indels alignment.bam 9 > indel_counts.txt
     tail -n +2 alignment.motif | cut -f1 | sort | uniq -c | awk '{print \$2 "\t" \$1}' > alignment.motifcounts
+
     #separate out mismapped reads using just motif and pos
-    cluster2b.py alignmentseqkit alignment.motifcounts $cov indel_counts.txt
+    workflow-glue cluster2b alignmentseqkit alignment.motifcounts indel_counts.txt $cov
     """
 }
 
@@ -513,9 +514,8 @@ process trim_adapters {
         tuple val(meta), path("reads_trimmed.fastq"), emit: fastqtrimmed
     //trim adapter. why not use cutadapt, because adapter not basecalled well and precision important to end motifs
     """
-    trim_adapter2.py reads.fastq reads_trimmed.fastq
+    workflow-glue trim_adapters reads.fastq $params.adapters_to_trim > reads_trimmed.fastq
     """
-
 }
 
 process filter_telomeres {
@@ -598,6 +598,8 @@ process filter_motifs {
         tuple val(meta), path("reads.fastq")
     output:
         tuple val(meta), path("removereadids.txt")
+    script:
+    String telomere_pattern = "TAACCCTAACCCTAACCCTAACCCTAACCC"
     //seqkit forward strand the telomere repeat and identify all locations for eachr read
     //reverse the file so last telomere location for each read is first and print one row for each read, effectively getting last telomere match position for each read
     //retrieve just id and length information I need
@@ -605,16 +607,28 @@ process filter_motifs {
     //Idnetify reads with high intensity so lots of kmer error clustered error within the telomere as this will not map and get softclipped, plus not useful for telomere length.
     //ensure just one read ID and @ is removed as not needed later on.
     """
-    seqkit locate --only-positive-strand -m 1 -p TAACCCTAACCCTAACCCTAACCCTAACCC reads.fastq > locationstelomere.txt
-    tac locationstelomere.txt | awk '!a[\$1]++' > locationstelomerelast.txt
-    awk -F'\t' '{print \$1" "\$5}' locationstelomerelast.txt | sort -r | tr ' ' '\t' > locationstelomerelast2.txt
+    # `seqkit locate` output is grouped by input sequence; we can use `awk` to print the
+    # last line of each group (i.e. read in our case)
+    seqkit locate -j 1 -P -m 1 -p $telomere_pattern reads.fastq \
+    | awk -F '\\t' '
+        BEGIN { OFS="\\t" }
+        {
+            if (\$1!=prev_id && prev_id) print prev_id, prev_start
+            prev_id=\$1
+            prev_start=\$5
+        }
+        END { print \$1, \$5 }
+    ' > last_telomere_locations.tsv
 
-    seqkit locate --only-positive-strand -m 0 -p GTATAG,CGCGCGCG,CCACCG,AGCGACAG,ATAAGT,CCTCGTCC,TATAGT,AGTACT,GAGTCC,TATAGT,TATACA,TGGTCC,CTCTCCTCT reads.fastq > motifs2.txt
-    error_reads.py motifs2.txt locationstelomerelast2.txt errors.txt
+    seqkit locate -j 1 -P -m 0 -p $params.filter_error_motifs reads.fastq \
+    | cut -f1,5 > error_locations.tsv
 
-    awk '!a[\$1]++' errors.txt > removereadids.txt
-    sed -i 's/@//g' removereadids.txt
-
+    workflow-glue error_reads \
+        --telomere-locations last_telomere_locations.tsv \
+        --error-locations error_locations.tsv \
+        --output removereadids.txt \
+        --window-size $params.filter_error_motifs_window_size \
+        --max-count $params.filter_error_motifs_max_count
     """
 }
 
@@ -713,6 +727,7 @@ process mappingbam {
     """
     cp mapping_reference2.fasta mapping_reference.fasta  # TODO: why cp this?
     minimap2 -ax map-ont -t $task.cpus mapping_reference.fasta reads.fastq | samtools sort -o telomere.bam
+    # TODO: could do indexing during `samtools sort` to be a little faster
     samtools index telomere.bam
     samtools view -bq ${params.mapq} -h telomere.bam > "telomere.q${params.mapq}.bam"
     samtools index "telomere.q${params.mapq}.bam"
@@ -750,24 +765,21 @@ process telomere_sites{
     input:
         tuple val(meta2), path("tel_reference.fasta")
     output:
-        tuple val(meta2), path("locationstelomerelast2.bed"), emit: telomerebed
+        tuple val(meta2), path("telomere_boundaries.bed"), emit: telomerebed
     script:
-    """       
-    seqkit locate --only-positive-strand -m 1 -p TAACCCTAACCCTAACCCTAACCCTAACCC,AACCCTAACCCTAACCCTAACCCTAACCCT,ACCCTAACCCTAACCCTAACCCTAACCCTA,CCCTAACCCTAACCCTAACCCTAACCCTAA,CCTAACCCTAACCCTAACCCTAACCCTAAC,CTAACCCTAACCCTAACCCTAACCCTAACC tel_reference.fasta > locationstelomere.txt
-    tac locationstelomere.txt | awk '!a[\$1]++' > locationstelomerelast.txt
-    awk -F'\t' '{print \$1"\t"\$5"\t"\$5}' locationstelomerelast.txt | sort -r | tr ' ' '\t' > locationstelomerelast2.txt
-    grep -v 'seqID' locationstelomerelast2.txt > locationstelomerelast2.bed
+    """
+    workflow-glue get_telomere_boundaries_in_fastx tel_reference.fasta \
+        > telomere_boundaries.bed
     """
 }
 
 process filtering {
-    tag { meta.alias }
     label "wf_teloseq"
     cpus   = 1
     memory 2.GB
     input:
         tuple val(meta), path("align.bam"), path("align.bam.bai")
-        tuple val(meta2), path("cutsites.txt")
+        tuple val(meta2), path("cutsites.bed")
         tuple val(meta2), path("telomeresites.txt")
     output:
         tuple val(meta), path("highfiltered.bam"), path("highfiltered.bam.bai"), emit: finalbam
@@ -788,34 +800,30 @@ process filtering {
     //low filter is keep only reads in which there end mapping position is 80 bp beyond last telomere motif
     //high filter is keep only reads in which there start mapping position is before last telomere motif identification and end is within 25 bp of cutsite
     """
-    seqkit bam align.bam 2>seqkitbamout.txt
-    filter_bam_reads_output_id.py --strict seqkitbamout.txt cutsites.txt telomeresites.txt id.txt
+    seqkit bam align.bam 2> sk-bam.tsv
 
-    awk '!seen[\$0]++' id.txt > id2.txt 
-    samtools view -N id2.txt -o temp.bam align.bam 
-    samtools index temp.bam
-    samtools view -h -o highfiltered.bam temp.bam
+    workflow-glue filter_bam_reads_output_id \\
+        --seqkit_bam_out sk-bam.tsv \\
+        --cut_sites_bed cutsites.bed \\
+        --telomere_ends_bed telomeresites.txt \\
+        --beyond_telomere_margin 80 \\
+        --close_to_cutsite_margin 25 \\
+        --output_strict_filter strict-keep-ids.txt \\
+        --output_lenient_filter lenient-keep-ids.txt \\
+        --output_no_filter no-extra-filter-keep-ids.txt
+
+    samtools view -N strict-keep-ids.txt align.bam -o highfiltered.bam
     samtools index highfiltered.bam
 
-    filter_bam_reads_output_id.py --lenient seqkitbamout.txt cutsites.txt telomeresites.txt lowid.txt 
-
-    awk '!seen[\$0]++' lowid.txt > lowid2.txt 
-    samtools view -N lowid2.txt -o lowtemp.bam align.bam
-    samtools index lowtemp.bam
-    samtools view -h -o lowfiltered.bam lowtemp.bam
+    samtools view -N lenient-keep-ids.txt align.bam -o lowfiltered.bam
     samtools index lowfiltered.bam
 
-    filter_bam_reads_output_id.py --none seqkitbamout.txt cutsites.txt telomeresites.txt noneid3.txt
-
-    awk '!seen[\$0]++' noneid3.txt > noneid4.txt 
-    samtools view -N noneid4.txt -o nonetemp4.bam align.bam
-    samtools index nonetemp4.bam
-    samtools view -h -o nofiltered.bam nonetemp4.bam
+    samtools view -N no-extra-filter-keep-ids.txt align.bam -o nofiltered.bam
     samtools index nofiltered.bam
     """
 }
 
-process raw_telomere_analysis {
+process telomere_lengths_raw {
     label "wf_teloseq"
     cpus   = 1
     memory 2.GB
@@ -823,25 +831,18 @@ process raw_telomere_analysis {
         tuple val(meta), path("telomere.fastq")
     output:
         tuple val(meta), path("Sample_raw_Coverage.csv"), emit: covraw
-        tuple val(meta), path("Sample_raw_Boxplot_of_Telomere_length.pdf"), emit: pdfraw
         tuple val(meta), path("Sample_raw_Per_Read_telomere_length.csv"), emit: plotraw
     script:
-    //search for locations of telomere sequences (x5 repeats) in individual reads.
-    //Reverse locations file to select last occurance of each telomere match, thereby selecting end position of telomere
-    //subtract the first telomere location from last so remove adapter length from telomere length.
+    // Note: this assumes `telomere length == coordinate of telomere boundary` (i.e.
+    // that there is no sequence that is not telomere at the beginnings of the reads)
     """
-    cat telomere.fastq | seqkit locate --only-positive-strand -m 1 -p TAACCCTAACCCTAACCCTAACCCTAACCC,AACCCTAACCCTAACCCTAACCCTAACCCT,ACCCTAACCCTAACCCTAACCCTAACCCTA,CCCTAACCCTAACCCTAACCCTAACCCTAA,CCTAACCCTAACCCTAACCCTAACCCTAAC,CTAACCCTAACCCTAACCCTAACCCTAACC > locationstelomere.txt
-    tac locationstelomere.txt | awk '!a[\$1]++' > locationstelomerelast.txt
-    awk -F'\t' '{print \$1" "\$6}' locationstelomerelast.txt | sort -r | tr ' ' '\t' > end
-    awk -F'\t' '!a[\$1]++' locationstelomere.txt | awk -F'\t' '{print \$1" "\$5}' | sort -r | tr ' ' '\t' > start
-    awk 'BEGIN {OFS="\t"} FNR==NR {if (NR>1) {a[\$1]=\$2}; next} FNR==1 {print} FNR>1 {\$2=\$2-a[\$1]; print}' start end > Sample
-    telomerewindowV1.py telomere.fastq telomere_read_length.txt
-    telomere_length_coverage_raw2.py Sample telomere_read_length.txt
+    workflow-glue get_telomere_boundaries_in_fastx telomere.fastq \\
+        > telomere_read_length.txt
+    workflow-glue summarise_raw_telomere_lengths telomere_read_length.txt Sample
     """
 }
 
 process results {
-    tag { meta.alias }
     label "wf_teloseq"
     cpus   = 1
     memory 2.GB
@@ -861,70 +862,61 @@ process results {
             path("highfiltered_chr_arm_Coverage.csv"),
             path("highfiltered_Per_Read_telomere_length.csv"),
             path("lowfiltered_chr_arm_Coverage.csv"),
-            path("lowfiltered.csv"),
             path("lowfiltered_Per_Read_telomere_length.csv"),
             path("nofiltered_chr_arm_Coverage.csv"),
             path("nofiltered_Per_Read_telomere_length.csv"),
-            path("output.csv"), 
+            path("output.csv"),
             emit: for_report
-        tuple val(meta),
-            path("highfiltered_Boxplot_of_Telomere_length.pdf"),
-            path("highfiltered_chr_arm_Boxplot_of_Telomere_length.pdf"),
-            path("nofiltered_chr_arm_Boxplot_of_Telomere_length.pdf"),
-            path("lowfiltered_chr_arm_Boxplot_of_Telomere_length.pdf"),
-            path("nofiltered_Boxplot_of_Telomere_length.pdf"),
-            path("lowfiltered_Boxplot_of_Telomere_length.pdf"),
-            emit: pdf
-        tuple val(meta),
-            path("nofiltered_Per_Read_telomere_length.csv"),
-            path("highfiltered_chr_arm_Coverage.csv"),
-            path("lowfiltered_Per_Read_telomere_length.csv"),
-            path("highfiltered_Per_Read_telomere_length.csv"),
-            path("nofiltered_chr_arm_Coverage.csv"),
-            path("lowfiltered_chr_arm_Coverage.csv"),
-            emit: alldata
     script:
     //search for locations of telomere sequences (x5 repeats) in individual reads.
     //Reverse locations file to select last occurance of each telomere match, thereby selecting end position of telomere
     //remove the first location of telomere from the last to remove any adapter length contributing.
     """
-    samtools index highfiltered.bam
-    samtools fastq highfiltered.bam | seqkit locate --only-positive-strand -m 1 -p TAACCCTAACCCTAACCCTAACCCTAACCC,AACCCTAACCCTAACCCTAACCCTAACCCT,ACCCTAACCCTAACCCTAACCCTAACCCTA,CCCTAACCCTAACCCTAACCCTAACCCTAA,CCTAACCCTAACCCTAACCCTAACCCTAAC,CTAACCCTAACCCTAACCCTAACCCTAACC > locationstelomerestrict.txt
-    tac locationstelomerestrict.txt | awk '!a[\$1]++' > locationstelomerelaststrict.txt
-    awk -F'\t' '{print \$1" "\$6}' locationstelomerelaststrict.txt | sort -r | tr ' ' '\t' > strict_end
-    awk -F'\t' '!a[\$1]++' locationstelomerestrict.txt | awk -F'\t' '{print \$1" "\$5}' | sort -r | tr ' ' '\t' > strict_start
-    awk 'BEGIN {OFS="\t"} FNR==NR {if (NR>1) {a[\$1]=\$2}; next} FNR==1 {print} FNR>1 {\$2=\$2-a[\$1]; print}' strict_start strict_end > strict_tel_length
+    cov=\$(cat coverage.txt)
     samtools faidx mapping_ref.fasta
-    seqkit bam highfiltered.bam 2>highfiltered
+
+    seqkit bam highfiltered.bam -f Read,Ref,Acc,Strand,IsSec,IsSup \\
+        2> highfiltered.sk-bam.tsv
     samtools fastq highfiltered.bam > highfiltered.fastq
-    telomerewindowV1.py highfiltered.fastq high_telomere_read_length.txt
-    telomere_length_coverage3.py highfiltered strict_tel_length mapping_ref.fasta.fai coverage.txt high_telomere_read_length.txt
+    # TODO: could modify script to read either FASTQ or BAM
+    # TODO: we should only call the script for finding the boundaries once on all the
+    #       reads (and split them up based on the filter afterwards)
+    workflow-glue get_telomere_boundaries_in_fastx highfiltered.fastq > high_telomere_read_length.txt
+    workflow-glue summarise_mapped_telomere_lengths \\
+        --seqkit-bam highfiltered.sk-bam.tsv \\
+        --ref-fai mapping_ref.fasta.fai \\
+        --min-coverage \$cov \\
+        --telomere-lengths high_telomere_read_length.txt \\
+        --output-prefix highfiltered
 
-    samtools index lowfiltered.bam
-    samtools fastq lowfiltered.bam | seqkit locate --only-positive-strand -m 1 -p TAACCCTAACCCTAACCCTAACCCTAACCC,AACCCTAACCCTAACCCTAACCCTAACCCT,ACCCTAACCCTAACCCTAACCCTAACCCTA,CCCTAACCCTAACCCTAACCCTAACCCTAA,CCTAACCCTAACCCTAACCCTAACCCTAAC,CTAACCCTAACCCTAACCCTAACCCTAACC > locationstelomerelenient.txt
-    tac locationstelomerelenient.txt | awk '!a[\$1]++' > locationstelomerelastlenient.txt
-    awk -F'\t' '{print \$1" "\$6}' locationstelomerelastlenient.txt | sort -r | tr ' ' '\t' > lenient_end
-    awk -F'\t' '!a[\$1]++' locationstelomerelenient.txt | awk -F'\t' '{print \$1" "\$5}' | sort -r | tr ' ' '\t' > lenient_start
-    awk 'BEGIN {OFS="\t"} FNR==NR {if (NR>1) {a[\$1]=\$2}; next} FNR==1 {print} FNR>1 {\$2=\$2-a[\$1]; print}' lenient_start lenient_end > lenient_tel_length
-    seqkit bam lowfiltered.bam 2>lowfiltered
+    seqkit bam lowfiltered.bam -f Read,Ref,Acc,Strand,IsSec,IsSup \\
+        2> lowfiltered.sk-bam.tsv
     samtools fastq lowfiltered.bam > lowfiltered.fastq
-    telomerewindowV1.py lowfiltered.fastq low_telomere_read_length.txt 
+    workflow-glue get_telomere_boundaries_in_fastx lowfiltered.fastq > low_telomere_read_length.txt
+    workflow-glue summarise_mapped_telomere_lengths \\
+        --seqkit-bam lowfiltered.sk-bam.tsv \\
+        --ref-fai mapping_ref.fasta.fai \\
+        --min-coverage \$cov \\
+        --telomere-lengths low_telomere_read_length.txt \\
+        --output-prefix lowfiltered
 
-    telomere_length_coverage3.py lowfiltered lenient_tel_length mapping_ref.fasta.fai coverage.txt low_telomere_read_length.txt
-
-    samtools index nofiltered.bam
-    samtools fastq nofiltered.bam | seqkit locate --only-positive-strand -m 1 -p TAACCCTAACCCTAACCCTAACCCTAACCC,AACCCTAACCCTAACCCTAACCCTAACCCT,ACCCTAACCCTAACCCTAACCCTAACCCTA,CCCTAACCCTAACCCTAACCCTAACCCTAA,CCTAACCCTAACCCTAACCCTAACCCTAAC,CTAACCCTAACCCTAACCCTAACCCTAACC > locationstelomereraw.txt
-    tac locationstelomereraw.txt | awk '!a[\$1]++' > locationstelomerelastraw.txt
-    awk -F'\t' '{print \$1" "\$6}' locationstelomerelastraw.txt | sort -r | tr ' ' '\t' > raw_end
-    awk -F'\t' '!a[\$1]++' locationstelomereraw.txt | awk -F'\t' '{print \$1" "\$5}' | sort -r | tr ' ' '\t' > raw_start
-    awk 'BEGIN {OFS="\t"} FNR==NR {if (NR>1) {a[\$1]=\$2}; next} FNR==1 {print} FNR>1 {\$2=\$2-a[\$1]; print}' raw_start raw_end > raw_tel_length
-    seqkit bam nofiltered.bam 2>nofiltered
+    seqkit bam nofiltered.bam -f Read,Ref,Acc,Strand,IsSec,IsSup \\
+        2> nofiltered.sk-bam.tsv
     samtools fastq nofiltered.bam > nofiltered.fastq
-    telomerewindowV1.py nofiltered.fastq no_telomere_read_length.txt
+    workflow-glue get_telomere_boundaries_in_fastx nofiltered.fastq > no_telomere_read_length.txt
+    workflow-glue summarise_mapped_telomere_lengths \\
+        --seqkit-bam nofiltered.sk-bam.tsv \\
+        --ref-fai mapping_ref.fasta.fai \\
+        --min-coverage \$cov \\
+        --telomere-lengths no_telomere_read_length.txt \\
+        --output-prefix nofiltered
 
-    telomere_length_coverage3.py nofiltered raw_tel_length mapping_ref.fasta.fai coverage.txt no_telomere_read_length.txt
-
-    combine_files.py 
+    workflow-glue combine_result_CSVs \\
+        --raw raw_coverage.csv \\
+        --no-filter nofiltered.csv \\
+        --low-filter lowfiltered.csv \\
+        --high-filter highfiltered.csv \\
+        --output output.csv
     """
 }
 
@@ -1005,16 +997,9 @@ workflow pipeline {
         workflow_params = getParams()
         metadata = samples.map { meta, reads, stats -> meta }.toList()
 
-        // Read file and create metadata tuple
-        Path ref = file(params.reference ?: "$projectDir/test_data/HG002qpMP_reference.fasta.gz", checkIfExists: true)
-
         //enzyme cut site to use
         enzyme_cut_site = params.enzyme_cut
 
-        // Pass the channel to the check_reference process
-        //check_reference(ref_ch)
-        check_reference(ref,enzyme_cut_site)
-        
         //remove duplicate reads - should not be common but just in case
         dedup = rmdup(samples.map{ meta, reads, stats -> [ meta,reads ] })
 
@@ -1034,7 +1019,12 @@ workflow pipeline {
         } else {
             nontelomeres = filter_nontelomeres(telomeres)
             remove_short_telomeres = remove_short2(telomeres)
+         // TODO: `nontelomeres` are telomeric reads that reach into the chromosomes
+         // `telomeres` also contains reads that don't reach into the chromosomes (they
+         // are only used for stats)
         }
+        // TODO: we can use `bcftools consensus` now (wasn't used because of version
+        // issues)
 
         //remove short reads
         remove_short_nontelomeres = remove_short1(nontelomeres)
@@ -1052,7 +1042,7 @@ workflow pipeline {
         trim_adapters(t2)
 
         //telomere lengths plot for raw filtered error reads
-        raw_telomere_analysis(trim_adapters.out.fastqtrimmed)
+        telomere_lengths_raw(trim_adapters.out.fastqtrimmed)
 
         //get min coverage
         read_count = trim_adapters.out.fastqtrimmed.countLines()
@@ -1089,16 +1079,8 @@ workflow pipeline {
         //add to output channel raw telomere results csv
         ch_to_publish = ch_to_publish 
         | mix(
-            raw_telomere_analysis.out.plotraw 
+            telomere_lengths_raw.out.plotraw 
             | map { meta, csv -> [csv, "${meta.alias}/results"] }
-            | transpose
-        )
-
-        //add to output channel raw telomere pdf plot
-        ch_to_publish = ch_to_publish 
-        | mix(
-            raw_telomere_analysis.out.pdfraw 
-            | map { meta, pdf -> [pdf, "${meta.alias}/plots"] }
             | transpose
         )
 
@@ -1110,8 +1092,8 @@ workflow pipeline {
             | join(read_stats1)
             | join(read_stats2)
             | join(read_stats3)
-            | join(raw_telomere_analysis.out.plotraw)
-            | join(raw_telomere_analysis.out.covraw)
+            | join(telomere_lengths_raw.out.plotraw)
+            | join(telomere_lengths_raw.out.covraw)
             | join(sub1)
 
             // collect results into a directory for the sample directory to avoid collisions
@@ -1135,6 +1117,12 @@ workflow pipeline {
             )
         } else {
             //MAPPING ARM PIPELINE
+
+            // Read file and create metadata tuple
+            Path ref = file(params.reference ?: "$projectDir/test_data/HG002qpMP_reference.fasta.gz", checkIfExists: true)
+
+            // prepare ref
+            check_reference(ref, enzyme_cut_site)
 
             //denovo reference route
             if (params.denovo) {
@@ -1203,7 +1191,6 @@ workflow pipeline {
                 paths.collect { path -> [metadata, path] }
                 }
 
-
                 //combine to a channel so the fastq file with each text file so runs each rather than just once with one fastq file
                 clusterchannel3 = split_clusters3.combine(trim_adapters.out.fastqtrimmed, by: 0)
 
@@ -1236,7 +1223,7 @@ workflow pipeline {
                 //get final telomere stats
                 results(
                     filtering.out.combined
-                    | join(raw_telomere_analysis.out.covraw)
+                    | join(telomere_lengths_raw.out.covraw)
                     | join(cov_filter),
                     combineRefR3.out.ref1,
                 )
@@ -1253,6 +1240,8 @@ workflow pipeline {
                 if (params.curation) {
                     //merge and correct de novo reference and new contigs
                     contigstoadd=file(params.curatedContigs, checkIfExists: true)
+                    // TODO: why have an extra param `--denovoRef` if we could just use
+                    // `--reference`?
                     denovoref1=file(params.denovoRef, checkIfExists: true)
                     // TODO: do we need to make sure that `params.curatedContigs` and
                     // `params.denovoRef` are present when `params.curation`? if so, we
@@ -1277,7 +1266,7 @@ workflow pipeline {
                     //get final telomere stats
                     results(
                         filtering.out.combined
-                        | join(raw_telomere_analysis.out.covraw)
+                        | join(telomere_lengths_raw.out.covraw)
                         | join(cov_filter),
                         manualCuration.out.ref1
                     )
@@ -1301,7 +1290,7 @@ workflow pipeline {
                     //get final telomere stats
                     results(
                         filtering.out.combined
-                        | join(raw_telomere_analysis.out.covraw)
+                        | join(telomere_lengths_raw.out.covraw)
                         | join(cov_filter),
                         check_reference.out.ref1,
                     )
@@ -1314,8 +1303,8 @@ workflow pipeline {
             | join(read_stats1)
             | join(read_stats2)
             | join(read_stats3)
-            | join(raw_telomere_analysis.out.plotraw) 
-            | join(raw_telomere_analysis.out.covraw)
+            | join(telomere_lengths_raw.out.plotraw) 
+            | join(telomere_lengths_raw.out.covraw)
             | join(sub1)
             | join(results.out.for_report)
 
@@ -1349,19 +1338,16 @@ workflow pipeline {
 
             //add to output channel, mapped csv files
             ch_to_publish = ch_to_publish 
-                | mix(
-                results.out.alldata 
-                | map { meta, csv1,csv2,csv3,csv4,csv5 ,csv6 -> [[csv1, csv2, csv3, csv4, csv5, csv6], "${meta.alias}/results"] }
+            | mix(
+                results.out.for_report
+                | map {
+                    meta = it[0]
+                    files = it[1..-1]
+                    [files, "${meta.alias}/results"]
+                }
                 | transpose
             )
 
-            //add to output channel, mapped pdf plot files
-            ch_to_publish = ch_to_publish 
-                | mix(
-                results.out.pdf 
-                | map { meta, pdf1,pdf2,pdf3,pdf4,pdf5 ,pdf6 -> [[pdf1, pdf2, pdf3, pdf4, pdf5, pdf6], "${meta.alias}/plots"] }
-                | transpose
-            )
             //add to output channel, reference used for mapping final results
             ch_to_publish = ch_to_publish 
                 | mix(
