@@ -91,18 +91,6 @@
                     "default": false,
                     "description": "Skip mapping step for just sample only telomere length",
                     "help_text": "If selected then the workflow will not run the mapping step but measure telomere length just on the unmapped telomere identified reads."
-                },
-                "denovo": {
-                    "type": "boolean",
-                    "default": false,
-                    "description": "create de novo reference",
-                    "help_text": "If selected then the de novo guided reference is constructed by first mapping to the default or provided reference then extracting subsets of reads for clustering, consensus and polishing. This creates a reference based upon the data to map back to and separate out the telomere reads by chromosome arm"
-                },
-                "curation": {
-                    "type": "boolean",
-                    "default": false,
-                    "description": "add manual contigs to reference",
-                    "help_text": "If selected with --curation option then these user input contigs are incorporated into the reference via mapping and error correction"
                 }
             }
         },
@@ -162,17 +150,11 @@
                     "description": "read quality filter parameter",
                     "help_text": "Read quality used to filter raw reads"
                 },
-                "enzyme_cut": {
+                "restriction_site": {
                     "type": "string",
                     "default": "GATATC",
                     "description": "enzyme cut site",
                     "help_text": "Restriction enzyme cut site used for filtering reads that are not close to this site for the strict setting"
-                },
-                "denovoRef": {
-                    "type": "string",
-                    "format": "path",
-                    "description": "de novo assembled reference from denovo route",
-                    "help_text": "If provided with curatedContigs then will incorporate both sets of contigs into one reference"
                 },
                 "cov_4cluster": {
                     "type": "integer",
@@ -185,12 +167,6 @@
                     "default": -1,
                     "description": "minimum read number for coverage of reference contig, default is 20% of telomere read average for 92 chr arms",
                     "help_text": "The minimum telomere coverage of chromosome arms to be taken to the final results and plots is calculated as 20% of the average chr arm coverage but can be overridden by giving a value here"
-                },
-                "curatedContigs": {
-                    "type": "string",
-                    "format": "path",
-                    "description": "manually selected contigs to add to reference",
-                    "help_text": "If provided with denovoRef then will incorporate both sets of contigs into one reference"
                 }
             }
         },

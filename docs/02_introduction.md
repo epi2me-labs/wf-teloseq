@@ -2,13 +2,11 @@
 
 Telo-Seq aims to measure telomere length accurately and assign each telomere to a chromosome arm. The experimental protocol and sequencing are described in separate Telo-Seq protocol and [Know-How](https://community.nanoporetech.com/knowledge/know-how/TELO-seq) documents. Telo-seq libraries are sequenced on Oxford Nanopore’s sequencing devices.
 
-`wf-teloseq` has three alternative pathways to analyse Telo-Seq data: 
+`wf-teloseq` currently supports two alternative pathways to analyse Telo-Seq data: 
 
-•	Pathway 1: Telomeric read counts and overall telomere length only.
+•	Pathway 1: Overall telomeric read counts and telomere length only (i.e. this combines all reads, regardless of which chromosome they originated from).
 
-•	Pathway 2: Chromosome arm assigned telomere read counts and telomere lengths using a matching reference. 
-
-•	Pathway 3: Chromosome arm assigned telomere read counts and telomere lengths using a reference created de novo from the data as specific to input data.
+•	Pathway 2: Using a matching reference, determine telomere read length and count for each chromosome arm individually.
 
 ## Note
 
