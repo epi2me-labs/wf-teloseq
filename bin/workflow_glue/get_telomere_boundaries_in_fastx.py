@@ -1,12 +1,12 @@
-#!/usr/bin/env python
 """This script processes a FASTQ file to find telomere boundaries in sequences."""
-
-import logging
 import re
 import sys
 
-from Bio import SeqIO
 import numpy as np
+import pysam
+
+from .util import wf_parser  # noqa: ABS101
+
 
 # MIT License
 #
@@ -30,8 +30,10 @@ import numpy as np
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-area_diffs_threshold = 0.2
-compositioncstrand = [['CCC', 3/6]]
+
+# TODO: lots of magic numbers in here; which ones do we want to expose to the user?
+AREA_DIFFS_THRESHOLD = 0.2
+COMPOSITIONCSTRAND = [["CCC", 3 / 6]]
 
 
 def calc_graph_area(offsets, target_column, window_size):
@@ -41,16 +43,22 @@ def calc_graph_area(offsets, target_column, window_size):
     area_list = []
     row = transposed_data[target_column, :]
     for i in range(0, len(row) - window_size, 1):
-        area = row[i:i + window_size].sum()
+        area = row[i: i + window_size].sum()
         area_list.append((area / window_size))
     return area_list
 
 
 def find_telo_boundary(
-    seq, composition_c_strand=[], telo_window=80, window_step=8,
-    change_threshold=-20, plateau_detection_threshold=-60,
-    target_pattern_index=-1, nucleotide_graph_area_window_size=700,
-    return_last_discontinuity=False, secondary_search=True
+    seq,
+    composition_c_strand=[],
+    telo_window=80,
+    window_step=8,
+    change_threshold=-20,
+    plateau_detection_threshold=-60,
+    target_pattern_index=-1,
+    nucleotide_graph_area_window_size=700,
+    return_last_discontinuity=False,
+    secondary_search=True,
 ):
     """Find the boundary point of the telomere in the given sequence."""
     boundary_point = -1
@@ -58,12 +66,12 @@ def find_telo_boundary(
     graph_area_window_size = int(nucleotide_graph_area_window_size / window_step)
 
     if not composition_c_strand:
-        composition_c_strand = compositioncstrand
+        composition_c_strand = COMPOSITIONCSTRAND
 
     composition = composition_c_strand
 
     for i in range(0, len(seq) - telo_window, window_step):
-        telo_seq = seq[i:i + telo_window]
+        telo_seq = seq[i: i + telo_window]
         telo_len = len(telo_seq)
         telo_seq_upper = str(telo_seq.upper())
 
@@ -77,26 +85,24 @@ def find_telo_boundary(
                     return -1
                 regex_target_length = nt_pattern_entry[2]
                 raw_offset_value = (
-                    (pattern_count * regex_target_length) / telo_len
-                    - pattern_composition
-                )
+                    pattern_count * regex_target_length
+                ) / telo_len - pattern_composition
                 if pattern_composition != 0:
                     percent_offset_value = (
-                        (raw_offset_value / pattern_composition) * 100
-                    )
+                        raw_offset_value / pattern_composition
+                    ) * 100
                     current_offsets.append(percent_offset_value)
                 else:
                     percent_offset_value = raw_offset_value * 100
                     current_offsets.append(percent_offset_value)
             else:
                 raw_offset_value = (
-                    (pattern_count * len(nt_pattern)) / telo_len
-                    - pattern_composition
-                )
+                    pattern_count * len(nt_pattern)
+                ) / telo_len - pattern_composition
                 if pattern_composition != 0:
                     percent_offset_value = (
-                        (raw_offset_value / pattern_composition) * 100
-                    )
+                        raw_offset_value / pattern_composition
+                    ) * 100
                     current_offsets.append(percent_offset_value)
                 else:
                     percent_offset_value = raw_offset_value * 100
@@ -112,31 +118,51 @@ def find_telo_boundary(
 
     if return_last_discontinuity:
         index_at_threshold = next(
-            (y for y in range(len(area_list) - 2, 0, -1)
-             if (area_list[y] > change_threshold and
-                 (0 > (area_list[y + 1] - area_list[y])))),
-            index_at_threshold
+            (
+                y
+                for y in range(len(area_list) - 2, 0, -1)
+                if (
+                    area_list[y] > change_threshold
+                    and (0 > (area_list[y + 1] - area_list[y]))
+                )
+            ),
+            index_at_threshold,
         )
         if index_at_threshold != -1:
             index_at_threshold = next(
-                (y for y in range(index_at_threshold, len(area_list) - 2)
-                 if (area_list[y] < plateau_detection_threshold and
-                     (0 > (area_list[y + 1] - area_list[y])))),
-                index_at_threshold
+                (
+                    y
+                    for y in range(index_at_threshold, len(area_list) - 2)
+                    if (
+                        area_list[y] < plateau_detection_threshold
+                        and (0 > (area_list[y + 1] - area_list[y]))
+                    )
+                ),
+                index_at_threshold,
             )
         else:
             index_at_threshold = next(
-                (y for y in range(len(area_list) - 2)
-                 if (area_list[y] < plateau_detection_threshold and
-                     (0 > (area_list[y + 1] - area_list[y])))),
-                index_at_threshold
+                (
+                    y
+                    for y in range(len(area_list) - 2)
+                    if (
+                        area_list[y] < plateau_detection_threshold
+                        and (0 > (area_list[y + 1] - area_list[y]))
+                    )
+                ),
+                index_at_threshold,
             )
     else:
         index_at_threshold = next(
-            (y for y in range(len(area_list) - 2)
-             if (area_list[y] < plateau_detection_threshold and
-                 (0 > (area_list[y + 1] - area_list[y])))),
-            index_at_threshold
+            (
+                y
+                for y in range(len(area_list) - 2)
+                if (
+                    area_list[y] < plateau_detection_threshold
+                    and (0 > (area_list[y + 1] - area_list[y]))
+                )
+            ),
+            index_at_threshold,
         )
 
     if index_at_threshold == -1:
@@ -144,9 +170,11 @@ def find_telo_boundary(
 
     area_diffs_threshold = 0.1
     for x in range(index_at_threshold, len(area_diffs) - 1):
-        if (abs(area_diffs[x]) < area_diffs_threshold or
-                area_diffs[x] < area_diffs_threshold and
-                area_diffs[x + 1] > area_diffs_threshold):
+        if (
+            abs(area_diffs[x]) < area_diffs_threshold
+            or area_diffs[x] < area_diffs_threshold
+            and area_diffs[x + 1] > area_diffs_threshold
+        ):
             boundary_point = x * window_step
             break
     if boundary_point == -1:
@@ -171,22 +199,25 @@ def find_telo_boundary(
             return boundary_point
         else:
             sec_boundary = find_telo_boundary(
-                scan_seq, composition_c_strand,
-                telo_window=80, window_step=8,
+                scan_seq,
+                composition_c_strand,
+                telo_window=80,
+                window_step=8,
                 change_threshold=change_threshold,
                 plateau_detection_threshold=-60,
                 target_pattern_index=-1,
                 nucleotide_graph_area_window_size=100,
                 return_last_discontinuity=return_last_discontinuity,
-                secondary_search=False
+                secondary_search=False,
             )
 
             temp_boundary = boundary_point + sec_boundary - telomere_offset
             if lower_index == 0:
                 temp_boundary = sec_boundary
             scan_seq = seq[
-                temp_boundary - telomere_offset_re:
-                temp_boundary + sub_telomere_offset_re
+                temp_boundary
+                - telomere_offset_re: temp_boundary
+                + sub_telomere_offset_re
             ]
 
             pattern_composition = nt_pattern_entry[1]
@@ -194,14 +225,10 @@ def find_telo_boundary(
                 return boundary_point
             else:
                 scan_pattern = f"({nt_pattern})({nt_pattern})"
-                matches = [
-                    match for match in re.finditer(scan_pattern, str(scan_seq))
-                ]
+                matches = [match for match in re.finditer(scan_pattern, str(scan_seq))]
                 if matches:
                     telo_end = matches[-1].end()
-                    boundary_point = (
-                        temp_boundary + telo_end - telomere_offset_re
-                    )
+                    boundary_point = temp_boundary + telo_end - telomere_offset_re
                 else:
                     boundary_point = temp_boundary
 
@@ -210,29 +237,27 @@ def find_telo_boundary(
 
 def is_regex_pattern(pattern):
     """Check if the given pattern is a regex pattern."""
-    regex_chars = r'[\\^$.*+?()[\]{}|]'
+    regex_chars = r"[\\^$.*+?()[\]{}|]"
     return any(char in pattern for char in regex_chars)
 
 
-def process_fastq_file(fastq_file, output_file):
-    """Process the given FASTQ file to find telomere boundaries."""
+def main(args):
+    """Run the entry point."""
     part1 = (
         "TTGAGGGAGTGCATTAGCATACAGGTGCTTGTTACATGTTGAGGGAGTGCATTAGCATACAGGTGCTTGTTACATGTT"
     )
-    non_telo_seq = (part1 * 10)
+    non_telo_seq = part1 * 10
 
-    with open(output_file, 'w') as f:
-        for record in SeqIO.parse(fastq_file, "fastq"):
+    with pysam.FastxFile(args.fastq_file) as f:
+        for record in f:
             # Append the known non-telomere sequence to both ends of the sequence
-            modified_seq = str(record.seq) + non_telo_seq
+            modified_seq = record.sequence + non_telo_seq
             boundary = find_telo_boundary(modified_seq, secondary_search=True)
-            f.write(f"{record.id}\t{boundary}\n")
+            sys.stdout.write(f"{record.name}\t{boundary}\n")
 
 
-if __name__ == "__main__":
-    if len(sys.argv) != 3:
-        logging.error("Usage: python telomerewindowV1.py <input_fastq> <output_file>")
-        sys.exit(1)
-    fastq_file_path = sys.argv[1]
-    output_file_path = sys.argv[2]
-    process_fastq_file(fastq_file_path, output_file_path)
+def argparser():
+    """Argument parser for entrypoint."""
+    parser = wf_parser("get_telomere_boundaries_in_fastq")
+    parser.add_argument("fastq_file", help="input FASTQ file")
+    return parser

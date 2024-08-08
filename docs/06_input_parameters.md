@@ -37,6 +37,10 @@
 
 | Nextflow parameter name  | Type | Description | Help | Default |
 |--------------------------|------|-------------|------|---------|
+| adapters_to_trim | string | Comma-delimited list of sequencing adapters to be trimmed |  | CACCCTAACCCTAACCCTAACC,CAACCCTAACCCTAACCCTAAC,CCTAACCCTAACCCTAACCCTA,CCCTAACCCTAACCCTAACCCT,CTAACCCTAACCCTAACCCTAA,CCCCTAACCCTAACCCTAACCC |
+| filter_error_motifs | string | Comma-delimited list of telomere error motifs for filtering | If more than `--filter_error_motifs_max_count` telomere error motifs are found within a window of size `--filter_error_motifs_window_size` in a telomere read, it is dropped from the analysis. | GTATAG,CGCGCGCG,CCACCG,AGCGACAG,ATAAGT,CCTCGTCC,TATAGT,AGTACT,GAGTCC,TATAGT,TATACA,TGGTCC,CTCTCCTCT |
+| filter_error_motifs_max_count | integer | Number of erroneous telomere k-mers to remove read. | If more than this number of telomere error motifs are found within a window of size `--filter_error_motifs_window_size` in the telomeric region of a read, it is dropped from the analysis. | 5 |
+| filter_error_motifs_window_size | integer | Size of window for filtering based on telomere error motifs. | If more than `--filter_error_motifs_max_count` telomere error motifs are found within a window of this length in the telomeric region of a read, it is dropped from the analysis. | 500 |
 | mapq | integer | mapping quality filter parameter | Mapping quality used to filter the bam file | 4 |
 | read_quality | integer | read quality filter parameter | Read quality used to filter raw reads | 9 |
 | enzyme_cut | string | enzyme cut site | Restriction enzyme cut site used for filtering reads that are not close to this site for the strict setting | GATATC |

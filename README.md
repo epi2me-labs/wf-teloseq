@@ -177,6 +177,10 @@ input_reads.fastq   ─── input_directory  ─── input_directory
 
 | Nextflow parameter name  | Type | Description | Help | Default |
 |--------------------------|------|-------------|------|---------|
+| adapters_to_trim | string | Comma-delimited list of sequencing adapters to be trimmed |  | CACCCTAACCCTAACCCTAACC,CAACCCTAACCCTAACCCTAAC,CCTAACCCTAACCCTAACCCTA,CCCTAACCCTAACCCTAACCCT,CTAACCCTAACCCTAACCCTAA,CCCCTAACCCTAACCCTAACCC |
+| filter_error_motifs | string | Comma-delimited list of telomere error motifs for filtering | If more than `--filter_error_motifs_max_count` telomere error motifs are found within a window of size `--filter_error_motifs_window_size` in a telomere read, it is dropped from the analysis. | GTATAG,CGCGCGCG,CCACCG,AGCGACAG,ATAAGT,CCTCGTCC,TATAGT,AGTACT,GAGTCC,TATAGT,TATACA,TGGTCC,CTCTCCTCT |
+| filter_error_motifs_max_count | integer | Number of erroneous telomere k-mers to remove read. | If more than this number of telomere error motifs are found within a window of size `--filter_error_motifs_window_size` in the telomeric region of a read, it is dropped from the analysis. | 5 |
+| filter_error_motifs_window_size | integer | Size of window for filtering based on telomere error motifs. | If more than `--filter_error_motifs_max_count` telomere error motifs are found within a window of this length in the telomeric region of a read, it is dropped from the analysis. | 500 |
 | mapq | integer | mapping quality filter parameter | Mapping quality used to filter the bam file | 4 |
 | read_quality | integer | read quality filter parameter | Read quality used to filter raw reads | 9 |
 | enzyme_cut | string | enzyme cut site | Restriction enzyme cut site used for filtering reads that are not close to this site for the strict setting | GATATC |
@@ -223,72 +227,6 @@ The recommended telomere read number input as minimum for best results would be 
 ## Output 
 
 `wf-teloseq` outputs telomere reads in bam format and telomere length statistics in csv format. It also produces an html report to summarise run results. If using Pathway 1, an overall sample telomere length estimate is given. Unless Pathway 2 is deactivated, the pipeline also reports a weighted average based on mean telomere lengths of chromosome arm assigned reads. This weighted average takes into account the variability of each chromosome arms read number and therefore may have less variance when comparing data sets. Only chromosome arms (or contigs) with at least 10x coverage will be reported.
-
-Pathway 1: With the --skipmapping parameter
-```
-output
-├── execution
-│   ├── report.html
-│   ├── timeline.html
-│   └── trace.txt
-├── reference
-│   └── reference.fasta
-├── Sample
-│       ├── plots
-│       │     └── Sample_raw_Boxplot_of_Telomere_length.pdf
-│       ├── reads
-│       │     └── Telomere_reads.fastq
-│       └── results
-│             └── Sample_raw_Per_Read_telomere_length.csv
-├── params.json
-├── versions.txt
-└── wf-teloseq-report.html
-```
-
-
-Pathway 2/3: Without the --skipmapping parameter. If using --denovo then an additional de novo reference will be reported in the reference folder. This can be followed up with --curation if the user has additional curated contigs to add to the de novo reference (see https://community.nanoporetech.com/knowledge/know-how/TELO-seq on how to do this).
-```
-output
-├── execution
-│   ├── report.html
-│   ├── timeline.html 
-│   └── trace.txt
-├── reference
-│   └── reference.fasta
-├── Sample
-│       ├── plots   
-│       │   ├── nofiltered_chr_arm_Boxplot_of_Telomere_length.pdf
-│       │   ├── nofiltered_Boxplot_of_Telomere_length.pdf
-│       │   ├── lowfiltered_chr_arm_Boxplot_of_Telomere_length.pdf
-│       │   ├── lowfiltered_Boxplot_of_Telomere_length.pdf
-│       │   ├── highfiltered_chr_arm_Boxplot_of_Telomere_length.pdf
-│       │   ├── highfiltered_Boxplot_of_Telomere_length.pdf  
-│       │   └── Sample_raw_Boxplot_of_Telomere_length.pdf
-│       ├── reads
-│       │   └── Telomere_reads.fastq
-│       ├── reference
-│       │   └── denovo_reference.fasta (--denovo)
-│       │   └── Manual_denovo_reference.fasta (--curation)
-│       ├── results        
-│       │   ├── Sample_raw_Per_Read_telomere_length.csv
-│       │   ├── nofiltered_Per_Read_telomere_length.csv
-│       │   ├── nofiltered_chr_arm_Coverage.csv
-│       │   ├── lowfiltered_Per_Read_telomere_length.csv
-│       │   ├── lowfiltered_chr_arm_Coverage.csv
-│       │   ├── highfiltered_Per_Read_telomere_length.csv 
-│       │   └── highfiltered_chr_arm_Coverage.csv
-│       └── alignments
-│           ├── telomere.q4.bam
-│           ├── telomere.q4.bam.bai
-│           ├── highfiltered.bam
-│           ├── highfiltered.bam.bai 
-│           ├── lowfiltered.bam  
-│           ├── lowfiltered.bam.bai
-│           └── mapping_reference.fasta
-├── params.json
-├── versions.txt
-└── wf-teloseq-report.html
-```
 
 
 ## Different filters applied in the pipeline
