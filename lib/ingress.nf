@@ -197,15 +197,15 @@ def fastq_ingress(Map arguments)
         .map { meta, files, stats ->
             // new `arity: '1..*'` would be nice here
             files = files instanceof List ? files : [files]
-            new_keys = [
+            def new_keys = [
                 "group_key": groupKey(meta["alias"], files.size()),
                 "n_fastq": files.size()]
-            grp_index = (0..<files.size()).collect()
+            def grp_index = (0..<files.size()).collect()
             [meta + new_keys, files, grp_index, stats]
         }
         .transpose(by: [1, 2])  // spread multiple fastq files into separate emissions
         .map { meta, files, grp_i, stats ->
-            new_keys = [
+            def new_keys = [
                 "group_index": "${meta["alias"]}_${grp_i}"]
             [meta + new_keys, files, stats]
         }
@@ -279,17 +279,19 @@ def xam_ingress(Map arguments)
         // sorted, the index will be used.
         meta, paths -> 
         boolean is_array = paths instanceof ArrayList
-        String xai_fn
+        String src_xam
+        String src_xai
         // Using `.uri` or `.Uri()` leads to S3 paths to be prefixed with `s3:///`
         // instead of `s3://`, causing the workflow to not find the index file.
         // `.toUriString()` returns the correct path.
         if (!is_array){
+            src_xam = paths.toUriString()
             def xai = file(paths.toUriString() + ".bai")
             if (xai.exists()){
-                xai_fn = xai.toUriString()
+                src_xai = xai.toUriString()
             }
         }
-        [meta + [xai_fn: xai_fn], paths]
+        [meta + [src_xam: src_xam, src_xai: src_xai], paths]
     }
     | checkBamHeaders
     | map { meta, paths, is_unaligned_env, mixed_headers_env, is_sorted_env ->
@@ -327,15 +329,19 @@ def xam_ingress(Map arguments)
         //  - too many aligned files to safely and quickly merge (`samtools merge` opens
         //    all files at the same time and some machines might have low limits for
         //    open file descriptors)
-        // * to_merge: flatMap > sort > group > merge
+        // * to_sortmerge: flatMap > sort > group > merge
+        // * to_merge: flatMap > group > merge
         //  - between 1 and `N_OPEN_FILES_LIMIT` aligned files
-        no_files: n_files == 0
+        no_files: \
+            n_files == 0
         indexed: \
-            n_files == 1 && (meta["is_unaligned"] || meta["is_sorted"]) && meta["xai_fn"]
-        to_index: 
-            n_files == 1 && (meta["is_unaligned"] || meta["is_sorted"]) && !meta["xai_fn"]
+            n_files == 1 && (meta["is_unaligned"] || meta["is_sorted"]) && meta["src_xai"]
+        to_index: \
+            n_files == 1 && (meta["is_unaligned"] || meta["is_sorted"]) && !meta["src_xai"]
         to_catsort: \
             (n_files == 1) || (n_files > N_OPEN_FILES_LIMIT) || meta["is_unaligned"]
+        to_sortmerge: \
+            !meta["is_sorted"]
         to_merge: true
     }
 
@@ -343,6 +349,7 @@ def xam_ingress(Map arguments)
         // only run samtools fastq on samples with at least one file
         ch_to_fastq = ch_result.indexed.mix(
             ch_result.to_index,
+            ch_result.to_sortmerge,
             ch_result.to_merge,
             ch_result.to_catsort
         )
@@ -358,20 +365,20 @@ def xam_ingress(Map arguments)
             .map { meta, files, stats -> 
                 // new `arity: '1..*'` would be nice here
                 files = files instanceof List ? files : [files]
-                new_keys = [
+                def new_keys = [
                     "group_key": groupKey(meta["alias"], files.size()),
                     "n_fastq": files.size()]
-                grp_index = (0..<files.size()).collect()
+                def grp_index = (0..<files.size()).collect()
                 [meta + new_keys, files, grp_index, stats]
             }
             .transpose(by: [1, 2])  // spread multiple fastq files into separate emissions
             .map { meta, files, grp_i, stats ->
-                new_keys = [
+                def new_keys = [
                     "group_index": "${meta["alias"]}_${grp_i}"]
                 [meta + new_keys, files, stats]
             }
             .map { meta, path, stats ->
-                [meta.findAll { it.key !in ['xai_fn', 'is_sorted'] }, path, stats]
+                [meta.findAll { it.key !in ['is_sorted', 'src_xam', 'src_xai'] }, path, stats]
             }
 
         // add number of reads, run IDs, and basecall models to meta
@@ -383,15 +390,26 @@ def xam_ingress(Map arguments)
     }
 
     // deal with samples with few-enough files for `samtools merge` first
-    ch_merged = ch_result.to_merge
+    // we'll sort any unsorted files before merge
+    ch_merged = ch_result.to_sortmerge
     | flatMap { meta, paths -> paths.collect { [meta, it] } }
     | sortBam
+    | map { meta, bam, bai -> [meta, bam] }  // drop index as merge does not need it
     | groupTuple
+    | mix(ch_result.to_merge)
     | mergeBams
+    | map{
+        meta, bam, bai ->
+        [meta + [src_xam: null, src_xai: null], bam, bai]
+    }
 
     // now handle samples with too many files for `samtools merge`
     ch_catsorted = ch_result.to_catsort
     | catSortBams
+    | map{
+        meta, bam, bai ->
+        [meta + [src_xam: null, src_xai: null], bam, bai]
+    }
 
     // Validate the index of the input BAM.
     // If the input BAM index is invalid, regenerate it.
@@ -399,7 +417,7 @@ def xam_ingress(Map arguments)
     ch_to_validate = ch_result.indexed
     | map{
         meta, paths ->
-        bai = paths && meta.xai_fn ? file(meta.xai_fn) : null
+        def bai = paths && meta.src_xai ? file(meta.src_xai) : null
         [meta, paths, bai]
     }
     | branch {
@@ -429,6 +447,10 @@ def xam_ingress(Map arguments)
     ch_indexed = ch_result.to_index
     | mix( ch_validated.invalid_idx )
     | samtools_index
+    | map{
+        meta, bam, bai ->
+        [meta + [src_xai: null], bam, bai]
+    }
 
     // Add extra null for the missing index to input.missing
     // as well as the missing metadata.
@@ -439,7 +461,7 @@ def xam_ingress(Map arguments)
     )
     | map{
         meta, paths ->
-        [meta + [xai_fn: null, is_sorted: false], paths, null]
+        [meta + [src_xam: null, src_xai: null, is_sorted: false], paths, null]
     }
 
     // Combine all possible inputs
@@ -480,7 +502,7 @@ def xam_ingress(Map arguments)
     }
 
     // Remove metadata that are unnecessary downstream:
-    // meta.xai_fn: not needed, as it will be part of the channel as a file
+    // meta.src_xai: not needed, as it will be part of the channel as a file
     // meta.is_sorted: if data are aligned, they will also be sorted/indexed
     //
     // The output meta can contain the following flags:
@@ -498,7 +520,7 @@ def xam_ingress(Map arguments)
         ch_result
             | map{
                 meta, bam, bai, stats ->
-                [meta.findAll { it.key !in ['xai_fn', 'is_sorted'] }, [bam, bai], stats]
+                [meta.findAll { it.key !in ['is_sorted'] }, [bam, bai], stats]
             }, 
         "xam"
     )
@@ -507,6 +529,19 @@ def xam_ingress(Map arguments)
     )
     | map{
         it.flatten()
+    }
+    // Final check to ensure that src_xam/src_xai is not an s3
+    // path. If so, drop it. We check src_xam also for src_xai
+    // as, the latter is irrelevant if the former is in s3.
+    | map{
+        meta, bam, bai, stats ->
+        def xam = meta.src_xam
+        def xai = meta.src_xai
+        if (meta.src_xam){
+            xam = meta.src_xam.startsWith('s3://') ? null : meta.src_xam
+            xai = meta.src_xam.startsWith('s3://') ? null : meta.src_xai
+        }
+        [ meta + [src_xam: xam, src_xai: xai], bam, bai, stats ]
     }
 
     return ch_result
@@ -623,12 +658,13 @@ process validateIndex {
 
 // Sort FOFN for samtools merge to ensure samtools sort breaks ties deterministically.
 // Uses -c to ensure matching RG.IDs across multiple inputs are not unnecessarily modified to avoid collisions.
+// Note that samtools merge does not use the indexes so we do not provide them
 process mergeBams {
     label "ingress"
     label "wf_common"
     cpus 3
     memory "4 GB"
-    input: tuple val(meta), path("input_bams/reads*.bam"), path("input_bams/reads*.bam.bai")
+    input: tuple val(meta), path("input_bams/reads*.bam")
     output: tuple val(meta), path("reads.bam"), path("reads.bam.bai")
     script:
     def merge_threads = Math.max(1, task.cpus - 1)
