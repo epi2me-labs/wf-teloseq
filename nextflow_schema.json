@@ -4,8 +4,8 @@
     "title": "epi2me-labs/wf-teloseq",
     "workflow_title": "Telomere sequencing workflow",
     "description": "A workflow to analyse telomere-enriched data generated using Oxford Nanopore’s Telo-Seq method.",
-    "demo_url": "#TODO:",
-    "aws_demo_url": "TODO:",
+    "demo_url": "https://ont-exd-int-s3-euwst1-epi2me-labs.s3.amazonaws.com/wf-teloseq/wf-teloseq-demo.tar.gz",
+    "aws_demo_url": "https://ont-exd-int-s3-euwst1-epi2me-labs.s3.amazonaws.com/wf-teloseq/wf-teloseq-demo/aws.nextflow.config",
     "url": "https://github.com/epi2me-labs/wf-teloseq/",
     "type": "object",
     "definitions": {
