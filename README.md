@@ -85,13 +85,14 @@ nextflow pull epi2me-labs/wf-teloseq
 A demo dataset is provided for testing of the workflow.
 It can be downloaded and unpacked using the following commands:
 ```
-wget #TODO:
+wget https://ont-exd-int-s3-euwst1-epi2me-labs.s3.amazonaws.com/wf-teloseq/wf-teloseq-demo.tar.gz
 tar -xzvf wf-teloseq-demo.tar.gz
 ```
 The workflow can then be run with the downloaded demo data using:
 ```
 nextflow run epi2me-labs/wf-teloseq \
-	// TODO: this should use demo data--fastq './test_data/HG002_small_test.fastq.gz' \
+	--bam 'wf-teloseq-demo/teloseq_example' \
+	--reference 'wf-teloseq-demo/HG002qpMP_reference.fasta.gz' \
 	-profile standard
 ```
 

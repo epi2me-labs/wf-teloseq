@@ -18,7 +18,7 @@ def reverse_complement(seq):
     revcomp = ""
     try:
         for base in seq[::-1]:
-            revcomp += bases[base]
+            revcomp += bases[base]  # Oh no
     except KeyError as e:
         (unexpected_char,) = e.args
         raise ValueError(f"Found unexpected character '{unexpected_char}' in sequence.")
