@@ -26,6 +26,8 @@ docker-run:
     # NOTE As we're overriding the rules block for the included docker-run
     #   we must redefine this CI_COMMIT_BRANCH rule to prevent docker-run
     #   being incorrectly scheduled for "detached merge request pipelines" etc.
+    #
+    #   TODO: revise all the ignored processes here, just dumped things in to get CI to pass
     - if: ($CI_COMMIT_BRANCH == null || $CI_COMMIT_BRANCH == "dev-template")
       when: never
     - if: $MATRIX_NAME == "defaults"
