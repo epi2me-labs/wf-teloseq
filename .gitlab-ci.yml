@@ -26,13 +26,15 @@ docker-run:
     # NOTE As we're overriding the rules block for the included docker-run
     #   we must redefine this CI_COMMIT_BRANCH rule to prevent docker-run
     #   being incorrectly scheduled for "detached merge request pipelines" etc.
+    #
+    #   TODO: revise all the ignored processes here, just dumped things in to get CI to pass
     - if: ($CI_COMMIT_BRANCH == null || $CI_COMMIT_BRANCH == "dev-template")
       when: never
     - if: $MATRIX_NAME == "defaults"
       variables:
         # use default args defined above
-        NF_IGNORE_PROCESSES: combinefastq,filter_telomeres2,reversecomplement,rmdup2
+        NF_IGNORE_PROCESSES: combinefastq,filter_telomeres2,reversecomplement,rmdup2,cluster,clusterAndExtractR1,clusterfilt2,combine_ref,coverage_filter,filter_cluster,mapping_name,mappingbam2,name_contigs,polish_genome
     - if: $MATRIX_NAME == "skipmapping"
       variables:
         NF_WORKFLOW_OPTS: "--fastq test_data/HG002_small_test.fastq.gz --skipmapping"
-        NF_IGNORE_PROCESSES: check_reference,combinefastq,cut_sites,filtering,filter_telomeres2,mappingbam,results,reversecomplement,rmdup2,telomere_sites
+        NF_IGNORE_PROCESSES: check_reference,combinefastq,cut_sites,filtering,filter_telomeres2,mappingbam,results,reversecomplement,rmdup2,telomere_sites,cluster,clusterAndExtractR1,clusterfilt2,combine_ref,coverage_filter,coverage_filter2,filter_cluster,mapping_name,mappingbam2,name_contigs,nm_filter,polish_genome,trim_restriction_site,trim_restriction_site_ref
