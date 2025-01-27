@@ -1,5 +1,5 @@
 """Extract reference from FASTA file."""
-
+import pathlib
 import sys
 
 import pysam
@@ -7,22 +7,7 @@ import pysam
 from .util import get_named_logger, wf_parser  # noqa: ABS101
 
 
-def reverse_complement(seq):
-    """Get the reverse complement of a DNA sequence."""
-    bases = {
-        "A": "T",
-        "C": "G",
-        "G": "C",
-        "T": "A",
-    }
-    revcomp = ""
-    try:
-        for base in seq[::-1]:
-            revcomp += bases[base]  # Oh no
-    except KeyError as e:
-        (unexpected_char,) = e.args
-        raise ValueError(f"Found unexpected character '{unexpected_char}' in sequence.")
-    return revcomp
+REVERSE_COMPLEMENT = str.maketrans("ACGTacgtn", "TGCATGCAN")
 
 
 def extract_telomere(
@@ -36,11 +21,11 @@ def extract_telomere(
     # find first occurrence of restriction site
     seq = seq.upper()
     if reverse:
-        seq = reverse_complement(seq)
+        seq = seq.translate(REVERSE_COMPLEMENT)[::-1]
     cut_pos = seq.find(restriction_motif.upper())
     if cut_pos != -1:
         # we found a cut site; let's make sure that there is a telomere upstream
-        if telomere_seq.upper() in seq[:cut_pos]:
+        if telomere_seq in seq[:cut_pos]:
             end_pos = cut_pos + extra_spacing
             return seq[:end_pos]
     # no telomere found
@@ -50,6 +35,7 @@ def extract_telomere(
 def main(args):
     """Run the entry point."""
     logger = get_named_logger("extractRefs")
+    args.telomere_seq = args.telomere_seq.upper()
 
     with pysam.FastxFile(args.fasta_file) as f:
         for entry in f:
@@ -80,9 +66,10 @@ def main(args):
 
 def argparser():
     """Argument parser for entrypoint."""
-    parser = wf_parser("extract_reference")
+    parser = wf_parser("ExtRef")
     parser.add_argument(
         "fasta_file",
+        type=pathlib.Path,
         help="Input reference FASTA file",
     )
     parser.add_argument(

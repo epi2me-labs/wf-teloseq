@@ -1,15 +1,13 @@
-#!/usr/bin/env python
-"""
-This module processes a BAM file to count indels.
-
-(insertions and deletions) above a certain threshold.
-"""
+"""Processes a BAM file to count indels above a certain threshold."""
 from collections import defaultdict
+import pathlib
 import sys
 
 import pysam
 
 from .util import wf_parser  # noqa: ABS101
+
+# TODO: This script should be folded into its producer/consumer
 
 
 def main(args):
@@ -42,9 +40,10 @@ def main(args):
 
 def argparser():
     """Argument parser for entrypoint."""
-    parser = wf_parser("count_indels")
+    parser = wf_parser("CountInd")
     parser.add_argument(
         "bam_file",
+        type=pathlib.Path,
         help="BAM file with indels to count",
     )
     parser.add_argument(

@@ -1,9 +1,12 @@
 """Extend telomere in FASTA file."""
+import pathlib
 import sys
 
 import pysam
 
 from .util import wf_parser  # noqa: ABS101
+
+# TODO: This script should be folded into its producer/consumer
 
 
 def main(args):
@@ -24,9 +27,10 @@ def main(args):
 
 def argparser():
     """Argument parser for entrypoint."""
-    parser = wf_parser("extend_telomere")
+    parser = wf_parser("ExtTelo")
     parser.add_argument(
         "input_file",
+        type=pathlib.Path,
         help="FASTA file with telomere->subtelomere sequences",
     )
     parser.add_argument(

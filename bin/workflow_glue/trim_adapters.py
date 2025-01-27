@@ -7,6 +7,8 @@ import pysam
 
 from .util import wf_parser  # noqa: ABS101
 
+# TODO: This scripts should be folded into its consumer/producer
+
 
 def main(args):
     """Run the entry point.
@@ -45,7 +47,7 @@ def main(args):
 
 def argparser():
     """Argument parser for entrypoint."""
-    parser = wf_parser("trim_adapters")
+    parser = wf_parser("TrimAdap")
     parser.add_argument("input", help="FASTQ file with reads to trim")
     parser.add_argument("adapter_seqs", help="comma-separated list of adapters to trim")
     return parser

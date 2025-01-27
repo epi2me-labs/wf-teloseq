@@ -1,17 +1,11 @@
 """Script to combine statistics CSV."""
-from pathlib import Path
+import pathlib
 
 import pandas as pd
 
 from .util import wf_parser  # noqa: ABS101
 
-
-def check_if_file(f):
-    """Raise error if `f` is not an existing file."""
-    path = Path(f)
-    if not path.is_file():
-        raise ValueError(f"'{f}' is not a valid file.")
-    return path
+# TODO: this seems like it could be done elsewhere?
 
 
 def main(args):
@@ -35,34 +29,30 @@ def main(args):
 
 def argparser():
     """Argument parser for entrypoint."""
-    parser = wf_parser("combine_result_CSVs")
+    parser = wf_parser("CombiCsv")
     parser.add_argument(
-        "--raw",
-        required=True,
-        type=check_if_file,
+        "raw",
+        type=pathlib.Path,
         help="CSV file with telomere stats of raw reads",
     )
     parser.add_argument(
-        "--no-filter",
-        required=True,
-        type=check_if_file,
+        "no_filter",
+        type=pathlib.Path,
         help="CSV file with telomere stats of unfiltered reads",
     )
     parser.add_argument(
-        "--low-filter",
-        required=True,
-        type=check_if_file,
+        "low_filter",
+        type=pathlib.Path,
         help="CSV file with telomere stats of low-filtered reads",
     )
     parser.add_argument(
-        "--high-filter",
-        required=True,
-        type=check_if_file,
+        "high_filter",
+        type=pathlib.Path,
         help="CSV file with telomere stats of high-filtered reads",
     )
     parser.add_argument(
-        "--output",
-        required=True,
+        "output",
+        type=pathlib.Path,
         help="filename for output CSV",
     )
     return parser
