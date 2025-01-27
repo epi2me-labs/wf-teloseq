@@ -1,0 +1,116 @@
+{
+  "files": {
+    "workflow-report": {
+      "filepath": "wf-teloseq-report.html",
+      "title": "workflow report",
+      "description": "Report for all samples",
+      "mime-type": "text/html",
+      "optional": false,
+      "type": "aggregated"
+    },
+    "tool-versions": {
+      "filepath": "versions.txt",
+      "title": "Tool versions",
+      "description": "A CSV with per row tool and version.",
+      "mime-type": "text/csv",
+      "optional": false,
+      "type": "aggregated"
+    },
+    "workflow-parameters": {
+      "filepath": "params.json",
+      "title": "Parameters from workflow",
+      "description": "A json of all parameters selected in workflow.",
+      "mime-type": "text/json",
+      "optional": false,
+      "type": "aggregated"
+    },
+    "chr-stats-high": {
+      "filepath": "{{alias}}/results/high_filtered_chr_arm_coverage.csv",
+      "title": "Chromosome arm statistics using strict filtering",
+      "description": "Chromosome arm statistics using strict filtering.",
+      "mime-type": "text/csv",
+      "optional": false,
+      "type": "per-sample"
+    },
+    "chr-stats-low": {
+      "filepath": "{{alias}}/results/low_filtered_chr_arm_coverage.csv",
+      "title": "Chromosome arm statistics using lenient filtering",
+      "description": "Chromosome arm statistics using lenient filtering.",
+      "mime-type": "text/csv",
+      "optional": false,
+      "type": "per-sample"
+    },
+    "per-read-stats-high": {
+      "filepath": "{{alias}}/results/high_filtered_per_read_telomere_length.csv",
+      "title": "Per telomere read statistics using strict filtering",
+      "description": "Per telomere read statistics using strict filtering.",
+      "mime-type": "text/csv",
+      "optional": false,
+      "type": "per-sample"
+    },
+    "per-read-stats-low": {
+      "filepath": "{{alias}}/results/low_filtered_per_read_telomere_length.csv",
+      "title": "Per telomere read statistics using lenient filtering",
+      "description": "Per telomere read statistics using lenient filtering.",
+      "mime-type": "text/csv",
+      "optional": false,
+      "type": "per-sample"
+    },
+    "per-read-stats-none": {
+      "filepath": "{{alias}}/results/no_filtered_per_read_telomere_length.csv",
+      "title": "Per telomere read statistics using no filtering",
+      "description": "Per telomere read statistics using no filtering.",
+      "mime-type": "text/csv",
+      "optional": false,
+      "type": "per-sample"
+    },
+    "per-read-stats-bulk": {
+      "filepath": "{{alias}}/results/sample_raw_per_read_telomere_length.csv",
+      "title": "Per telomere read statistics of bulk",
+      "description": "Per telomere read statistics of bulk.",
+      "mime-type": "text/csv",
+      "optional": false,
+      "type": "per-sample"
+    },
+    "telomere-reads": {
+      "filepath": "{{alias}}/reads/reads_trimmed.fastq",
+      "title": "Trimmed telomere reads",
+      "description": "Adapter trimmed identified telomere reads.",
+      "mime-type": "application/fastq",
+      "optional": false,
+      "type": "per-sample"
+    },
+    "read-stats": {
+      "filepath": "{{alias}}/results/output.csv",
+      "title": "Read statistics",
+      "description": "Read stats for each filter.",
+      "mime-type": "text/csv",
+      "optional": false,
+      "type": "per-sample"
+    },
+    "bam-tagged": {
+      "filepath": "{{alias}}/alignments/{{alias}}.tagged.bam",
+      "title": "Aligned reads strict",
+      "description": "Aligned reads after strict filtering.",
+      "mime-type": "application/octet-stream",
+      "optional": false,
+      "type": "per-sample"
+    },
+    "reference-naming": {
+      "filepath": "{{alias}}/reference_naming/naming_summary.csv",
+      "title": "De novo contig naming",
+      "description": "Summary of blast results used for contig naming.",
+      "mime-type": "text/csv",
+      "optional": true,
+      "type": "per-sample"
+    },
+    "sample-data": {
+      "filepath": "{{alias}}/alignments/filtered_reference.fasta",
+      "title": "Reference used for alignment",
+      "description": "Reference used for alignment after extraction.",
+      "mime-type": "application/fasta",
+      "optional": false,
+      "type": "per-sample"
+    }
+  }
+}

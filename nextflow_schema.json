@@ -1,0 +1,309 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema",
+    "$id": "https://raw.githubusercontent.com/./master/nextflow_schema.json",
+    "title": "epi2me-labs/wf-teloseq",
+    "workflow_title": "Telomere sequencing workflow",
+    "description": "A workflow to analyse telomere-enriched data generated using Oxford Nanopore’s Telo-Seq method.",
+    "demo_url": "https://ont-exd-int-s3-euwst1-epi2me-labs.s3.amazonaws.com/wf-teloseq/wf-teloseq-demo.tar.gz",
+    "aws_demo_url": "https://ont-exd-int-s3-euwst1-epi2me-labs.s3.amazonaws.com/wf-teloseq/wf-teloseq-demo/aws.nextflow.config",
+    "url": "https://github.com/epi2me-labs/wf-teloseq/",
+    "type": "object",
+    "definitions": {
+        "input": {
+            "title": "Input Options",
+            "type": "object",
+            "fa_icon": "fas fa-arrow-right",
+            "description": "Parameters for finding and handling input data for analysis.",
+            "properties": {
+                "fastq": {
+                    "type": "string",
+                    "format": "path",
+                    "title": "FASTQ",
+                    "description": "FASTQ files to use in the analysis.",
+                    "help_text": "This accepts one of three cases: (i) the path to a single FASTQ file; (ii) the path to a top-level directory containing FASTQ files; (iii) the path to a directory containing one level of sub-directories which in turn contain FASTQ files. In the first and second case, a sample name can be supplied with `--sample`. In the last case, the data is assumed to be multiplexed with the names of the sub-directories as barcodes. In this case, a sample sheet can be provided with `--sample_sheet`."
+                },
+                "bam": {
+                    "type": "string",
+                    "format": "path",
+                    "description": "BAM or unaligned BAM (uBAM) files to use in the analysis.",
+                    "help_text": "This accepts one of three cases: (i) the path to a single BAM file; (ii) the path to a top-level directory containing BAM files; (iii) the path to a directory containing one level of sub-directories which in turn contain BAM files. In the first and second case, a sample name can be supplied with `--sample`. In the last case, the data is assumed to be multiplexed with the names of the sub-directories as barcodes. In this case, a sample sheet can be provided with `--sample_sheet`."
+                },
+                "analyse_unclassified": {
+                    "type": "boolean",
+                    "default": false,
+                    "title": "Analyse unclassified reads",
+                    "description": "Analyse unclassified reads from input directory. By default the workflow will not process reads in the unclassified directory.",
+                    "help_text": "If selected and if the input is a multiplex directory the workflow will also process the unclassified directory."
+                },
+                "reference": {
+                    "type": "string",
+                    "format": "file-path",
+                    "pattern": "^\\S+\\.(fasta|fa|fna|faa)(\\.gz)?$",
+                    "description": "Reference genome of the sequenced sample."
+                }
+            },
+            "oneOf": [
+                {
+                    "required": [
+                        "fastq"
+                    ]
+                },
+                {
+                    "required": [
+                        "bam"
+                    ]
+                }
+            ]
+        },
+        "samples": {
+            "title": "Sample Options",
+            "type": "object",
+            "fa_icon": "fas fa-vials",
+            "description": "Parameters that relate to samples such as sample sheets and sample names.",
+            "properties": {
+                "sample_sheet": {
+                    "type": "string",
+                    "format": "file-path",
+                    "description": "A CSV file used to map barcodes to sample aliases. The sample sheet can be provided when the input data is a directory containing sub-directories with FASTQ files.",
+                    "help_text": "The sample sheet is a CSV file with, minimally, columns named `barcode` and `alias`. Extra columns are allowed. A `type` column is required for certain workflows and should have the following values; `test_sample`, `positive_control`, `negative_control`, `no_template_control`."
+                },
+                "sample": {
+                    "type": "string",
+                    "description": "A single sample name for non-multiplexed data. Permissible if passing a single .FASTQ(.gz) file or directory of .FASTQ(.gz) files."
+                }
+            }
+        },
+        "teloseq_options": {
+            "title": "TeloSeq Options",
+            "type": "object",
+            "fa_icon": "fas fa-arrow-left",
+            "description": "Parameters modifying TeloSeq pipeline behaviour",
+            "properties": {
+                "skipmapping": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Skip mapping step for just sample only telomere length",
+                    "help_text": "If selected then the workflow will not run the mapping step but measure telomere length just on the unmapped telomere-subtelomere identified reads."
+                },
+                "denovo": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Create reference from the data to map back to",
+                    "help_text": "Uses vsearch clustering and filtering steps to produce a denovo guided reference that is specific to the data sample."
+                }
+            }
+        },
+        "output": {
+            "title": "Output Options",
+            "type": "object",
+            "fa_icon": "fas fa-arrow-left",
+            "description": "Parameters for saving and naming workflow outputs.",
+            "properties": {
+                "out_dir": {
+                    "type": "string",
+                    "default": "output",
+                    "format": "directory-path",
+                    "description": "Directory for output of all workflow results."
+                }
+            }
+        },
+        "advanced_options": {
+            "title": "Advanced Options",
+            "type": "object",
+            "fa_icon": "far fa-question-circle",
+            "description": "Advanced options for configuring processes inside the workflow.",
+            "help_text": "These advanced options do not need to be changed for typical use, but allow fine tuning of workflows for users who want more control over the workflow.",
+            "properties": {
+                "adapters_to_trim": {
+                    "type": "string",
+                    "default": "CACCCTAACCCTAACCCTAACC,CAACCCTAACCCTAACCCTAAC,CCTAACCCTAACCCTAACCCTA,CCCTAACCCTAACCCTAACCCT,CTAACCCTAACCCTAACCCTAA,CCCCTAACCCTAACCCTAACCC",
+                    "description": "Comma-delimited list of sequencing adapters to be trimmed up to but not including.",
+                    "help_text": "Uses telomere so all adapter is trimmed off the ends of the telomere containing end of reads."
+                },
+                "filter_error_motifs": {
+                    "type": "string",
+                    "default": "GTATAG,CGCGCGCG,CCACCG,AGCGACAG,ATAAGT,CCTCGTCC,TATAGT,AGTACT,GAGTCC,TATAGT,TATACA,TGGTCC,CTCTCCTCT",
+                    "description": "Comma-delimited list of telomere error motifs for filtering",
+                    "help_text": "If more than `--filter_error_motifs_max_count` telomere error motifs are found within a window of size `--filter_error_motifs_window_size` in a telomere read, it is dropped from the analysis."
+                },
+                "filter_error_motifs_max_count": {
+                    "type": "integer",
+                    "default": 5,
+                    "description": "Number of erroneous telomere k-mers to remove read.",
+                    "help_text": "If more than this number of telomere error motifs are found within a window of size `--filter_error_motifs_window_size` in the telomeric region of a read, it is dropped from the analysis."
+                },
+                "filter_error_motifs_window_size": {
+                    "type": "integer",
+                    "default": 500,
+                    "description": "Size of window for filtering based on telomere error motifs.",
+                    "help_text": "If more than `--filter_error_motifs_max_count` telomere error motifs are found within a window of this length in the telomeric region of a read, it is dropped from the analysis."
+                },
+                "mapq": {
+                    "type": "integer",
+                    "default": 4,
+                    "description": "Mapping quality filter parameter",
+                    "help_text": "Mapping quality used to filter the BAM file"
+                },
+                "min_coverage_percent": {
+                    "type": "integer",
+                    "default": 15,
+                    "description": "Minimum percentage coverage of total telomere reads per chr arm for filtering",
+                    "help_text": "Used in minimum coverage calculation for telomere reads using number of chromosome arms"
+                },
+                "min_length": {
+                    "type": "integer",
+                    "default": 100,
+                    "description": "Minimum read length for filtering",
+                    "help_text": "Used in initial filtering of reads."
+                },
+                "exclude_chr_from_naming": {
+                    "type": "string",
+                    "default": "chr9q chr11p chr13p chr15p chr19p chr6p chr20q chr3q chr6q chr7p chr14p",
+                    "description": "Exclusion naming list",
+                    "help_text": "Used in chromosome naming to exclude from naming as too similar to others"
+                },
+                "motif_threshold": {
+                    "type": "integer",
+                    "default": 40,
+                    "description": "Number of motif of repeat to identify chr21p",
+                    "help_text": "Chr21p can be identified by the repeat composition rather than blastn"
+                },
+                "max_sstart": {
+                    "type": "integer",
+                    "default": 20,
+                    "description": "Max starting location of blastn hit",
+                    "help_text": "This ensures blasthits are not part of the reference but spans the beginning"
+                },
+                "min_pident": {
+                    "type": "number",
+                    "default": 95,
+                    "description": "Minimum percent identity from the blastn",
+                    "help_text": "Used in the de novo naming to filter poor hits"
+                },
+                "exp_chr_num": {
+                    "type": "integer",
+                    "default": 92,
+                    "description": "Expected number of chr",
+                    "help_text": "Used in minimum coverage calculation for telomere reads with percentage minimum covereage number"
+                },
+                "naming_file": {
+                    "type": "string",
+                    "format": "file-path",
+                    "description": "pangenome used to name de novo contigs"
+                },
+                "read_quality": {
+                    "type": "integer",
+                    "default": 9,
+                    "description": "Read quality filter parameter"
+                },
+                "restriction_site": {
+                    "type": "string",
+                    "default": "GATATC",
+                    "description": "Enzyme cut site",
+                    "help_text": "Restriction enzyme cut site used for filtering reads that are not close to this site for the strict setting"
+                },
+                "beyond_cut": {
+                    "type": "integer",
+                    "default": 300,
+                    "description": "Amount of reference to include beyond cut site for each contig"
+                },
+                "telomere_extension": {
+                    "type": "integer",
+                    "default": 4000,
+                    "description": "Addition of telomere to reference avoid mismapping",
+                    "help_text": "Reads primary and secondary alignments can be incorrect if one similar reference contig has longer telomere that allows read to match to it better than the other contig"
+                },
+                "telomere_margin": {
+                    "type": "integer",
+                    "default": 2000,
+                    "description": "Distance from telomere boundary to use to remove reads whose 3' end do not map up to this chromosome position."
+                },
+                "min_coverage": {
+                    "type": "integer",
+                    "default": -1,
+                    "description": "minimum read number for coverage of reference contig, default is 20% of telomere read average for 92 chr arms",
+                    "help_text": "The minimum telomere coverage of chromosome arms to be taken to the final results and plots is calculated as 20% of the average chr arm coverage but can be overridden by giving a value here"
+                }
+            }
+        },
+        "misc": {
+            "title": "Miscellaneous Options",
+            "type": "object",
+            "description": "Everything else.",
+            "default": "",
+            "properties": {
+                "disable_ping": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Enable to prevent sending a workflow ping."
+                },
+                "help": {
+                    "type": "boolean",
+                    "description": "Display help text.",
+                    "fa_icon": "fas fa-question-circle",
+                    "default": false,
+                    "hidden": true
+                },
+                "version": {
+                    "type": "boolean",
+                    "description": "Display version and exit.",
+                    "fa_icon": "fas fa-question-circle",
+                    "default": false,
+                    "hidden": true
+                }
+            }
+        }
+    },
+    "allOf": [
+        {
+            "$ref": "#/definitions/input"
+        },
+        {
+            "$ref": "#/definitions/samples"
+        },
+        {
+            "$ref": "#/definitions/teloseq_options"
+        },
+        {
+            "$ref": "#/definitions/output"
+        },
+        {
+            "$ref": "#/definitions/advanced_options"
+        },
+        {
+            "$ref": "#/definitions/misc"
+        }
+    ],
+    "properties": {
+        "aws_image_prefix": {
+            "type": "string",
+            "hidden": true
+        },
+        "aws_queue": {
+            "type": "string",
+            "hidden": true
+        },
+        "monochrome_logs": {
+            "type": "boolean"
+        },
+        "validate_params": {
+            "type": "boolean",
+            "default": true
+        },
+        "show_hidden_params": {
+            "type": "boolean"
+        }
+    },
+    "resources": {
+        "recommended": {
+            "cpus": 16,
+            "memory": "32GB"
+        },
+        "minimum": {
+            "cpus": 8,
+            "memory": "16GB"
+        },
+        "run_time": "5/15/30 minutes per sample for pathway 1/2/3",
+        "arm_support": false
+    }
+}
