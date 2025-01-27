@@ -16,7 +16,7 @@ Telo-Seq aims to measure telomere length accurately and assign each telomere to 
 
 •	Pathway 2: Using a matching reference, determine telomere read length and count for each chromosome arm individually.
 
-•	Pathway 3: Using a non-matching reference to create a de novo guided reference, determine telomere read length and count for each chromosome arm individually.
+•	Pathway 3: Creates a de novo reference, determine telomere read length and count for each chromosome arm individually.
 
 ## Note
 
@@ -119,7 +119,7 @@ Find related protocols in the [Nanopore community](https://community.nanoporetec
 <!---Example of input directory structure, delete and edit as appropriate per workflow.--->
 This workflow accepts either FASTQ or BAM files as input.
 
-The FASTQ or BAM input parameters for this workflow accept one of three cases: (i) the path to a single FASTQ or BAM file; (ii) the path to a top-level directory containing FASTQ or BAM files; (iii) the path to a directory containing one level of sub-directories which in turn contain FASTQ or BAM files. In the first and second cases (i and ii), a sample name can be supplied with `--sample`. In the last case (iii), the data is assumed to be multiplexed with the names of the sub-directories as barcodes. In this case, a sample sheet can be provided with `--sample_sheet`.
+The FASTQ or BAM input parameters for this workflow accept one of three cases: (i) the path to a single FASTQ or BAM file; (ii) the path to a top-level directory containing FASTQ or BAM files; (iii) the path to a directory containing one level of sub-directories which in turn contain FASTQ or BAM files. In the first and second cases (i and ii), a sample name can be supplied with `--sample`. In the last case (iii), the data is assumed to be multiplexed with the names of the sub-directories as barcodes. In this case, a sample sheet can be provided with `--sample_sheet`. The sample sheet can include a "reference" column to assign each sample a specific reference to map to.
 
 ```
 (i)                     (ii)                 (iii)    
@@ -146,7 +146,6 @@ input_reads.fastq   ─── input_directory  ─── input_directory
 | fastq | string | FASTQ files to use in the analysis. | This accepts one of three cases: (i) the path to a single FASTQ file; (ii) the path to a top-level directory containing FASTQ files; (iii) the path to a directory containing one level of sub-directories which in turn contain FASTQ files. In the first and second case, a sample name can be supplied with `--sample`. In the last case, the data is assumed to be multiplexed with the names of the sub-directories as barcodes. In this case, a sample sheet can be provided with `--sample_sheet`. |  |
 | bam | string | BAM or unaligned BAM (uBAM) files to use in the analysis. | This accepts one of three cases: (i) the path to a single BAM file; (ii) the path to a top-level directory containing BAM files; (iii) the path to a directory containing one level of sub-directories which in turn contain BAM files. In the first and second case, a sample name can be supplied with `--sample`. In the last case, the data is assumed to be multiplexed with the names of the sub-directories as barcodes. In this case, a sample sheet can be provided with `--sample_sheet`. |  |
 | analyse_unclassified | boolean | Analyse unclassified reads from input directory. By default the workflow will not process reads in the unclassified directory. | If selected and if the input is a multiplex directory the workflow will also process the unclassified directory. | False |
-| doublestranded | boolean | double stranded protocol | If selected then the telomere reads are identified on both strands, then the second strand is reverse complemented so that all reads are orientated telomere first and pipeline continues as normal but with the other strand reads used. | False |
 | reference | string | Reference genome of the sequenced sample. |  |  |
 
 
@@ -183,14 +182,19 @@ input_reads.fastq   ─── input_directory  ─── input_directory
 | filter_error_motifs_window_size | integer | Size of window for filtering based on telomere error motifs. | If more than `--filter_error_motifs_max_count` telomere error motifs are found within a window of this length in the telomeric region of a read, it is dropped from the analysis. | 500 |
 | mapq | integer | Mapping quality filter parameter | Mapping quality used to filter the BAM file | 4 |
 | min_coverage_percent | integer | Minimum percentage coverage of total telomere reads per chr arm for filtering | Used in minimum coverage calculation for telomere reads using number of chromosome arms | 15 |
+| min_length | integer | Minimum read length for filtering | Used in initial filtering of reads. | 100 |
+| exclude_chr_from_naming | string | Exclusion naming list | Used in chromosome naming to exclude from naming as too similar to others | chr9q chr11p chr13p chr15p chr19p chr6p chr20q chr3q chr6q chr7p chr14p |
+| motif_threshold | integer | Number of motif of repeat to identify chr21p | Chr21p can be identified by the repeat composition rather than blastn | 40 |
+| max_sstart | integer | Max starting location of blastn hit | This ensures blasthits are not part of the reference but spans the beginning | 20 |
+| min_pident | number | Minimum percent identity from the blastn | Used in the de novo naming to filter poor hits | 95 |
 | exp_chr_num | integer | Expected number of chr | Used in minimum coverage calculation for telomere reads with percentage minimum covereage number | 92 |
 | naming_file | string | pangenome used to name de novo contigs |  |  |
 | read_quality | integer | Read quality filter parameter |  | 9 |
 | restriction_site | string | Enzyme cut site | Restriction enzyme cut site used for filtering reads that are not close to this site for the strict setting | GATATC |
 | beyond_cut | integer | Amount of reference to include beyond cut site for each contig |  | 300 |
 | telomere_extension | integer | Addition of telomere to reference avoid mismapping | Reads primary and secondary alignments can be incorrect if one similar reference contig has longer telomere that allows read to match to it better than the other contig | 4000 |
-| telomere_margin | integer | Distance from telomere boundary to use to remove reads whose 3' end do not map up to this chromosome position. |  | 60 |
-| mincoverage | integer | minimum read number for coverage of reference contig, default is 20% of telomere read average for 92 chr arms | The minimum telomere coverage of chromosome arms to be taken to the final results and plots is calculated as 20% of the average chr arm coverage but can be overridden by giving a value here | -1 |
+| telomere_margin | integer | Distance from telomere boundary to use to remove reads whose 3' end do not map up to this chromosome position. |  | 2000 |
+| min_coverage | integer | minimum read number for coverage of reference contig, default is 20% of telomere read average for 92 chr arms | The minimum telomere coverage of chromosome arms to be taken to the final results and plots is calculated as 20% of the average chr arm coverage but can be overridden by giving a value here | -1 |
 
 
 
@@ -214,11 +218,9 @@ Output files may be aggregated including information for all samples or provided
 | Per telomere read statistics of bulk | {{alias}}/results/sample_raw_per_read_telomere_length.csv | Per telomere read statistics of bulk. | per-sample |
 | Trimmed telomere reads | {{alias}}/reads/reads_trimmed.fastq | Adapter trimmed identified telomere reads. | per-sample |
 | Read statistics | {{alias}}/results/output.csv | Read stats for each filter. | per-sample |
-| Aligned reads strict | {{alias}}/alignments/high_filtered.bam | Aligned reads after strict filtering. | per-sample |
-| Aligned reads lenient | {{alias}}/alignments/low_filtered.bam | Aligned reads after lenient filtering. | per-sample |
-| Aligned reads none | {{alias}}/alignments/telomere.q4.bam | Aligned reads after quality score filtering. | per-sample |
+| Aligned reads strict | {{alias}}/alignments/{{alias}}.tagged.bam | Aligned reads after strict filtering. | per-sample |
 | De novo contig naming | {{alias}}/reference_naming/naming_summary.csv | Summary of blast results used for contig naming. | per-sample |
-| Reference used for alignment | {{alias}}/alignments/reference.fasta | Reference used for alignment after extraction. | per-sample |
+| Reference used for alignment | {{alias}}/alignments/filtered_reference.fasta | Reference used for alignment after extraction. | per-sample |
 
 
 
@@ -228,28 +230,26 @@ Output files may be aggregated including information for all samples or provided
 ## Input
 
 `wf-teloseq` requires basecalled nanopore reads in FASTQ or BAM format as input.
-For best results, we recommend to use at least 1000 telomere reads per sample.
-Unless per-chromosome analysis is disabled, a reference is also required.
-This can be a telomere-to-telomere assembly or a FASTA file containing telomere-subtelomeres only.
-Per default, a telomere reference constructed from HG002 (`data/HG002qpMP_reference.fasta.gz`) is used.
+For best results, we recommend to use at least 1000 telomere reads per sample for pathway 2 and 2000 for pathway 3.
+Per default if a reference is not provided via the `--reference` or the `--sample_sheet` parameter, then a telomere reference constructed from HG002 (`data/HG002qpMP_reference.fasta.gz`) is used for pathway 2.
 
 We recommend basecalling with super accuracy (SUP) models.
 High accuracy (HAC) basecalling will also work but will result in slightly reduced number of telomere reads.
 See our [Know-How document](https://community.nanoporetech.com/knowledge/know-how/TELO-seq) for further information on this.
 
-The workflow will search both ends of each reference sequence for telomeric repeats (of `TAACCC`) and the first occurrence of the restriction enzyme motif provided by `--restriction_site` (per default `GATATC` for EcoRV).
+The pathway 2 workflow will search both ends of each reference sequence for telomeric repeats (of `TAACCC`) and the first occurrence of the restriction enzyme motif provided by `--restriction_site` (per default `GATATC` for EcoRV).
 It will then
 * extract the telomere until `--ref_add_margin` after the restriction site
 * attempt to reduce bias in the later alignment step leading to incorrect assignment of primary and secondary alignments caused by reference telomere length differences and thus alignment lengths used in mapping scores by
-    * trimming the telomere sequence to first repeat so to not introduce a variant
-    * extending the sequence with a "synthetic" telomere sequence of 4000 repeats of `TAACCC`
+    * trimming the telomere sequence to first repeat so to not introduce a variant and impact upon telomere length measurements
+    * extending the sequence with a "synthetic" telomere sequence of 4000 repeats of `TAACCC` to prevent incorrect read placement via secondary and primary mappings.
 
 The reads are then aligned against the reference + filtered (see below for details) before determining telomere length + counts.
 
 
 ## Output 
 
-`wf-teloseq` outputs aligned telomere reads in BAM format and telomere length statistics in CSV format. It also produces a HTML report to summarise run results. Unless reference analysis is disabled, an overall telomere length estimate is given for each sample. Otherwise, the pipeline also reports the mean telomere lengths of reads assigned to individual chromosome arms. Only chromosome arms (or contigs) with at least 10x coverage will be reported.
+`wf-teloseq` outputs aligned telomere reads in BAM format and telomere length statistics in CSV format. It also produces a HTML report to summarise run results. Unless reference analysis is disabled, an overall telomere length estimate is given for each sample. Otherwise, the pipeline also reports the mean telomere lengths of reads assigned to individual chromosome arms. Only chromosome arms (or contigs) with at least the calculated 0.15% average chr coverage, will be reported.
 
 
 ## Different filters applied in the pipeline
@@ -258,14 +258,14 @@ The reads are then aligned against the reference + filtered (see below for detai
 |-|-|
 | Applied to all | mapq score default is 4 but user can lower or raise if needed |   
 | none | no additional filters are applied so no additional reads removed. |   
-| low stringency | keep only reads in which the end mapping position is `--telomere_margin` (per default 60 bp) beyond telomere boundary. This is to remove short telomere only reads that would not be chromosome arm specific and also could be truncated/fragmented. |
-| high stringency | keep only reads in which the start mapping position is before telomere boundary identification and end mapping position is within 25 bp of cutsite with exception of cutsites beyond 45k as will get very few of these reads and will still map accurately. This is to ensure reads span subtelomere and to limit mismapping and fragmented reads. |
+| low stringency | keep only reads in which the end mapping position is `--telomere_margin` (per default 2000 bp) beyond telomere boundary or cut site, whichever is shorter. This is to remove short telomere only reads that would not be chromosome arm specific and also could be truncated/fragmented. |
+| high stringency | keep only reads in which the start mapping position is before telomere boundary identification and end mapping position is within 25 bp of cut site with exception of cut sites beyond 45k as will get very few of these reads and will still map accurately. This is to ensure reads span subtelomere and to limit mismapping and fragmented reads. |
 
 
 
 ## Test data
 
-A small test dataset of reads is provided with `wf-teloseq` in "test_data" to help users test the workflow using Pathway 1 and 2. It consists of a reference file and HG002 sample reads to test the installation.
+A small test dataset of reads is provided with `wf-teloseq` in "test_data" to help users test the workflow using Pathway 1 and 2. It consists of HG002 sample reads to test the installation and alternate references HG005 and YAO for non-matching reference method exploration.
 
 
 ## Reference genome
@@ -274,12 +274,12 @@ The telomere reference provided with the pipeline is based on the HG002 telomere
 
 In the supplied HG002 reference genome, the sub-telomeric sequence up to the EcoRV cut site in chromosome 13 (paternal) P arm is identical to chromosome 22 (paternal) P arm, so we only have one representative sequence in the reference provided. Although the telomere lengths cluster distinctly for these identical sequence identity arms, if two identical contigs are present there will be random mapping and a distorted telomere length estimate. The pipeline does not yet separate out these two arms based upon telomere length from the single contig provided but is planned in a future release.
 
-Human cell lines, and individuals, have genetic variation in their sub-telomeric regions. These may impact chromosome arm assignment if differences compared to the reference used in the analysis are substantial, or make the sub-telomeric regions indistinguishable. For most reliable chromosome arm telomere length estimation, it is recommended to use a genome reference for that specific sample (e.g. cell line or individual). Overall telomere length estimation (pathway 1) is not affected by this, as it is entirely reference-free. We provide de novo reference creation approach using clustering to produce a reference from the data for chr arm separation when a matching reference is not available (pathway 3). Naming of contigs is limited to ~45 contigs that can be confidently named. High similarity of half the chr arms makes it difficult to assign which chromosome they correspond to but variation exists that can be used to separate out the chr arms in the de novo reference construction.  
+Human cell lines, and individuals, have genetic variation in their sub-telomeric regions. These may impact chromosome arm assignment if differences compared to the reference used in the analysis are substantial, or make the sub-telomeric regions indistinguishable. For most reliable chromosome arm telomere length estimation, it is recommended to use a genome reference for that specific sample (e.g. cell line or individual). Overall telomere length estimation (pathway 1) is not affected by this, as it is entirely reference-free. We provide de novo reference creation approach using clustering to produce a reference from the data for chr arm separation when a matching reference is not available (pathway 3). Naming of contigs is limited to ~45 contigs that can be confidently named. High similarity of half the chr arm subtelomeres makes it difficult to assign which chromosome they correspond to but variation exists that can be used to separate out the chr arms in the de novo reference construction.  
 
 
 ## Run time
 
-Running a typical Telo-Seq dataset (4K telomere reads) through `wf-teloseq` with matching sample human chromosome arm mapping assignment takes approximately 15 minutes and non-matching 1 hr. When skipping the mapping stage (`--skipmapping`), it takes less than 5 minutes.
+Running a typical Telo-Seq dataset (4K telomere reads) through `wf-teloseq` with matching sample human chromosome arm mapping assignment takes approximately 5 minutes and non-matching >1 hr. When skipping the mapping stage (`--skipmapping`), it takes less than 3 minutes.
 
 
 ## Running in Epi2me labs via Windows on a laptop 
