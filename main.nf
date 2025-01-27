@@ -285,11 +285,12 @@ process filter_motifs {
     | cut -f1,5 > error_locations.tsv
 
     workflow-glue error_reads \
-        --telomere-locations last_telomere_locations.tsv \
-        --error-locations error_locations.tsv \
-        --output removereadids.txt \
-        --window-size $params.filter_error_motifs_window_size \
-        --max-count $params.filter_error_motifs_max_count
+        error_locations.tsv \
+        last_telomere_locations.tsv \
+        removereadids.txt
+        # consider reinstating these parameters
+        #--window_size $params.filter_error_motifs_window_size \
+        #--max_count $params.filter_error_motifs_max_count
     """
 }
 
@@ -573,11 +574,11 @@ process results {
         --output-prefix nofiltered
 
     workflow-glue combine_result_CSVs \\
-        --raw raw_coverage.csv \\
-        --no-filter nofiltered.csv \\
-        --low-filter lowfiltered.csv \\
-        --high-filter highfiltered.csv \\
-        --output output.csv
+        raw_coverage.csv \\
+        nofiltered.csv \\
+        lowfiltered.csv \\
+        highfiltered.csv \\
+        output.csv
     """
 }
 

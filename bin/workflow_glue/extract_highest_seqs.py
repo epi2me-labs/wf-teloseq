@@ -4,6 +4,7 @@ This script extracts the sequence with the highest count.
 Using a given input file and writes it to an output file.
 """
 
+import pathlib
 import re
 import sys
 
@@ -32,9 +33,10 @@ def main(args):
 
 def argparser():
     """Argument parser for entrypoint."""
-    parser = wf_parser("extract_highest_seqs")
+    parser = wf_parser("ExtHigh")
     parser.add_argument(
         "input_fasta",
+        type=pathlib.Path,
         help="VSEARCH output consensus FASTA file",
     )
     parser.add_argument(

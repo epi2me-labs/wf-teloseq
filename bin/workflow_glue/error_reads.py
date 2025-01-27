@@ -1,4 +1,5 @@
 """Script to process error reads data and print ID results to a file."""
+import pathlib
 
 import numpy as np
 import pandas as pd
@@ -45,32 +46,30 @@ def main(args):
 
 def argparser():
     """Argument parser for entrypoint."""
-    parser = wf_parser("error_reads")
+    parser = wf_parser("ErrReads")
     parser.add_argument(
-        "--error-locations",
-        required=True,
+        "error_locations",
+        type=pathlib.Path,
         help="`seqkit locate` output file of erroneous k-mers",
     )
     parser.add_argument(
-        "--telomere-locations",
-        required=True,
+        "telomere_locations",
+        type=pathlib.Path,
         help="`seqkit locate` output file of telomeres",
     )
     parser.add_argument(
-        "--output",
-        required=True,
+        "output",
+        type=pathlib.Path,
         help="file to write read IDs to remove",
     )
     parser.add_argument(
-        "--window-size",
-        required=True,
-        type=int,
+        "--window_size",
         help="size of sliding window",
+        type=int, default=500
     )
     parser.add_argument(
-        "--max-count",
-        required=True,
-        type=int,
+        "--max_count",
         help="maximum number of occurrences of erroneous k-mers to filter out a read",
+        type=int, default=5
     )
     return parser

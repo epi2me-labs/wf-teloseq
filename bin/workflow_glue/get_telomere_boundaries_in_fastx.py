@@ -32,6 +32,7 @@ from .util import wf_parser  # noqa: ABS101
 
 
 # TODO: lots of magic numbers in here; which ones do we want to expose to the user?
+# cjw: none
 AREA_DIFFS_THRESHOLD = 0.2
 COMPOSITIONCSTRAND = [["CCC", 3 / 6]]
 
@@ -258,6 +259,6 @@ def main(args):
 
 def argparser():
     """Argument parser for entrypoint."""
-    parser = wf_parser("get_telomere_boundaries_in_fastq")
+    parser = wf_parser("TeloBoun")
     parser.add_argument("fastq_file", help="input FASTQ file")
     return parser
