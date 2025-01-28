@@ -335,7 +335,3 @@ def main(args):
     sorted_sequences = sort_fasta(args.reference_file, summary_df)
 
     write_sorted_fasta(sorted_sequences, args.output_fasta)
-
-
-if __name__ == "__main__":
-    main(argparser().parse_args())
