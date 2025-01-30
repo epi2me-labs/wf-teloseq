@@ -11,6 +11,9 @@ include { mapping as mapping2 } from './modules/local/common'
 include { fastq_stats as fastq_stats_all } from './modules/local/common'
 include { fastq_stats as fastq_stats_telo } from './modules/local/common'
 include { fastq_stats as fastq_stats_telo_subtelo } from './modules/local/common'
+include { filter_motifs_reads as filter_motifs_reads1 } from './modules/local/common'
+include { filter_motifs_reads as filter_motifs_reads2 } from './modules/local/common'
+
 
 OPTIONAL_FILE = file("$projectDir/data/OPTIONAL_FILE")
 
@@ -22,7 +25,6 @@ process getVersions {
     output: path "versions.txt"
     script:
     """
-    python -c "import Bio; print(f'biopython,{Bio.__version__}')" >> versions.txt
     python -c "import matplotlib as mpl; print(f'matplotlib,{mpl.__version__}')" >> versions.txt
     python -c "import pyfastx; print(f'pyfastx,{pyfastx.__version__}')" >> versions.txt
     python -c "import pysam; print(f'pysam,{pysam.__version__}')" >> versions.txt
@@ -42,7 +44,7 @@ process getVersions {
     """
 }
 
-
+// Note: First open and operation on input reads
 process checkReads {
     label "wf_teloseq"
     cpus 1
@@ -62,31 +64,42 @@ process checkReads {
     fi
     """
 }
-
-//minimum coverage of 5 telomere reads
-process coverage_calc {
+// Looks for telomeric repeats in the fastq and filters those reads into a file
+// Note: Second open and operation on input reads
+process filter_reads {
     label "wf_teloseq"
     cpus 1
     memory '2 GB'
     input:
         tuple val(meta), path("reads.fastq")
     output:
-        tuple val(meta), stdout, emit: cov
+        tuple val(meta), path("telomere.fastq")
     script:
     """
-    if [[ "${params.min_coverage}" != -1 ]]; then
-        coverage=${params.min_coverage}
-    else
-        read_count=\$(wc -l < reads.fastq | awk '{print \$1}')
-        coverage=\$(( read_count / 4 / ${params.exp_chr_num} * ${params.min_coverage_percent} / 100 ))
-        if (( coverage < 5 )); then
-            coverage=5
-        fi
-    fi
-    echo -n \$coverage
+    seqkit grep -s -R 60:500 -P -p "TAACCCTAACCCTAACCCTAACCCTAACCCTAACCCTAACCCTAACCCTAACCCTAACCC" reads.fastq > telomere.fastq
     """
 }
-
+// Looks for telomeric repeats in the last 70bp. These reads are considered short, as the cut site is after this.
+// These reads are added into their own file
+// Note: Third open and operation on input reads
+process filter_nontelomeres {
+    label "wf_teloseq"
+    cpus   1
+    memory '2 GB'
+    input:
+        tuple val(meta), path("reads.fastq")
+    output:
+        tuple val(meta), path("telomere_and_non_telomere.fastq")
+    // filter further subset that should not have telomere sequence in the last 70bp as shortest cut site is beyond this so should have atleast this amount of sequence at end that
+    // is not telomere and don't want telomere only reads as could be fragments or artefacts. 
+    script:
+    """
+    seqkit grep -v -s -R -70:-1 -P -p "TAACCCTAACCCTAACCCTAACCC" reads.fastq > telomere_and_non_telomere.fastq
+    """
+}
+// Note: Third open and operation on input reads
+// Cuts a third different length of the telomere repeat from the 5' end
+// Then reads the ouput fastq and writes a file of read lengths
 process subtelomere {
     label "wf_teloseq"
     cpus   1
@@ -102,92 +115,10 @@ process subtelomere {
     """
 }
 
-process check_reference {
-    label "wf_teloseq"
-    cpus   1
-    memory '2 GB'
-    input:
-        tuple val(meta), path("reference")  // can be compressed or uncompressed
-    output:
-        tuple val(meta), path("reference.fasta"), emit: reference
-    script:
-    """
-    ##Extending telomere to each contig of the reference, as it has been observed misclassification of primary and secondary alignments
-    ##if some arms have telomeres longer than the read but other contigs don't and are similar sequence but the correct site,
-    ##it will map to the incorrect arm because it has a longer alignment from the prescence of telomere causing
-    ##an expected primary alignment to become secondary and vice versa.
-
-    workflow-glue extract_reference \\
-        reference \\
-        TAACCCTAACCCTAACCCTAACCCTAACCCTAACCCTAACCCTAACCCTAACCCTAACCC \\
-        ${params.restriction_site} \\
-        ${params.beyond_cut} \\
-        > extracted.fasta
-
-    workflow-glue extend_telomere extracted.fasta TAACCC ${params.telomere_extension} > reference.fasta
-    """
-}
-
-process trim_adapters {
-    label "wf_teloseq"
-    cpus   1
-    memory '2 GB'
-    input:
-        tuple val(meta), path("reads.fastq")
-    output:
-        tuple val(meta), path("reads_trimmed.fastq"), emit: fastqtrimmed
-    //trim adapter. why not use cutadapt, because adapter not basecalled well and precision important to end motifs
-    """
-    workflow-glue trim_adapters reads.fastq $params.adapters_to_trim > reads_trimmed.fastq
-    """
-}
-
-process trim_restriction_site {
-    label "wf_teloseq"
-    cpus   = 1
-    memory '2 GB'
-    input:
-        tuple val(meta), path("reads.fastq")
-    output:
-        tuple val(meta), path("reads_restrict_trimmed.fastq"), emit: fastqrestrimmed
-    //trim adapter. why not use cutadapt, because adapter not basecalled well and precision important to end motifs
-    """
-    cutadapt -a "${params.restriction_site}" -e 0 -o reads_restrict_trimmed.fastq reads.fastq
-    """
-}
-
-process trim_restriction_site_ref {
-    label "wf_teloseq"
-    cpus   1
-    memory '2 GB'
-    input:
-        tuple val(meta), path("reference.fasta")
-    output:
-        tuple val(meta), path("reference_trim.fasta"), emit: reference
-        tuple val(meta), path("cut_first.bed"), emit: cutsites
-    //trim adapter. why not use cutadapt, because adapter not basecalled well and precision important to end motifs
-    """
-    cutadapt -a "${params.restriction_site}" -e 0 -o reference_trim.fasta reference.fasta
-    samtools faidx reference_trim.fasta
-    awk -F'\t' '{print \$1"\t0\t"\$2}' reference_trim.fasta.fai > cut_first.bed
-    """
-}
-
-process filter_nontelomeres {
-    label "wf_teloseq"
-    cpus   1
-    memory '2 GB'
-    input:
-        tuple val(meta), path("reads.fastq")
-    output:
-        tuple val(meta), path("telomere_and_non_telomere.fastq")
-    //filter further subset that should not have telomere sequence in the last 70bp as shortest cut site is beyond this so should have atleast this amount of sequence at end that
-    //is not telomere and don't want telomere only reads as could be fragments or artefacts. 
-    """
-    seqkit grep -v -s -R -70:-1 -P -p "TAACCCTAACCCTAACCCTAACCC" reads.fastq > telomere_and_non_telomere.fastq
-    """
-}
-
+// Note: fourth open of input reads
+// AFAIK - this is finding the location of specifically common basecalling error motifs, and also the location of the last telomere repeat in the read
+// It is then using AWK to get the last telomere location, and passing both into a python script that dumps those read ids into a file if 
+// there are a certain number of basecalling errors within a window, AFTER the last telomere repeat.
 process filter_motifs {
     label "wf_teloseq"
     cpus   1
@@ -230,46 +161,122 @@ process filter_motifs {
     """
 }
 
-//remove basecalling error reads from telomere only identified reads
-process filter_motifs_reads1 {
+process trim_adapters {
     label "wf_teloseq"
     cpus   1
     memory '2 GB'
     input:
-        tuple val(meta), path("reads.fastq"), path("remove_ids.txt")
+        tuple val(meta), path("reads.fastq")
     output:
-        tuple val(meta), path("telomere_reads.fastq")
+        tuple val(meta), path("reads_trimmed.fastq"), emit: fastqtrimmed
+    //trim adapter. why not use cutadapt, because adapter not basecalled well and precision important to end motifs
+    script:
     """
-    seqkit grep -v -f remove_ids.txt reads.fastq > telomere_reads.fastq
+    workflow-glue trim_adapters reads.fastq $params.adapters_to_trim > reads_trimmed.fastq
     """
 }
 
-//remove basecalling error reads from telomere and subtelomere identified reads
-process filter_motifs_reads2 {
+
+process telomere_lengths_raw {
     label "wf_teloseq"
     cpus   1
     memory '2 GB'
     input:
-        tuple val(meta), path("reads.fastq"), path("remove_ids.txt")
+        tuple val(meta), path("telomere.fastq")
     output:
-        tuple val(meta), path("telomere_reads.fastq")
+        tuple val(meta), path("sample_raw_coverage.csv"), emit: covraw
+        tuple val(meta), path("sample_raw_per_read_telomere_length.csv"), emit: plotraw
+    script:
+    // Note: this assumes `telomere length == coordinate of telomere boundary` (i.e.
+    // that there is no sequence that is not telomere at the beginnings of the reads)
     """
-    seqkit grep -v -f remove_ids.txt reads.fastq > telomere_reads.fastq
+    workflow-glue get_telomere_boundaries_in_fastx telomere.fastq \\
+        > telomere_read_length.txt
+    workflow-glue summarise_telomere_lengths --mode raw --telomere_lengths telomere_read_length.txt --output_prefix sample
     """
 }
 
-process filter_reads {
+process coverage_calc {
     label "wf_teloseq"
     cpus 1
     memory '2 GB'
     input:
         tuple val(meta), path("reads.fastq")
     output:
-        tuple val(meta), path("telomere.fastq")
+        tuple val(meta), stdout, emit: cov
     script:
     """
-    seqkit grep -s -R 60:500 -P -p "TAACCCTAACCCTAACCCTAACCCTAACCCTAACCCTAACCCTAACCCTAACCCTAACCC" reads.fastq > telomere.fastq
+    if [[ "${params.min_coverage}" != -1 ]]; then
+        coverage=${params.min_coverage}
+    else
+        read_count=\$(wc -l < reads.fastq | awk '{print \$1}')
+        coverage=\$(( read_count / 4 / ${params.exp_chr_num} * ${params.min_coverage_percent} / 100 ))
+        if (( coverage < 5 )); then
+            coverage=5
+        fi
+    fi
+    echo -n \$coverage
     """
+}
+
+
+process check_reference {
+    label "wf_teloseq"
+    cpus   1
+    memory '2 GB'
+    input:
+        tuple val(meta), path("reference")  // can be compressed or uncompressed
+    output:
+        tuple val(meta), path("reference.fasta"), emit: reference
+    script:
+    """
+    ##Extending telomere to each contig of the reference, as it has been observed misclassification of primary and secondary alignments
+    ##if some arms have telomeres longer than the read but other contigs don't and are similar sequence but the correct site,
+    ##it will map to the incorrect arm because it has a longer alignment from the prescence of telomere causing
+    ##an expected primary alignment to become secondary and vice versa.
+
+    workflow-glue extract_reference \\
+        reference \\
+        TAACCCTAACCCTAACCCTAACCCTAACCCTAACCCTAACCCTAACCCTAACCCTAACCC \\
+        ${params.restriction_site} \\
+        ${params.beyond_cut} \\
+        > extracted.fasta
+
+    workflow-glue extend_telomere extracted.fasta TAACCC ${params.telomere_extension} > reference.fasta
+    """
+}
+
+
+
+process trim_restriction_site {
+    label "wf_teloseq"
+    cpus 1
+    memory '2 GB'
+    input:
+        tuple val(meta), path("reads.fastq")
+    output:
+        tuple val(meta), path("reads_restrict_trimmed.fastq"), emit: fastqrestrimmed
+    script:
+    """
+    cutadapt -a "${params.restriction_site}" -e 0 -o reads_restrict_trimmed.fastq reads.fastq
+    """
+}
+
+process trim_restriction_site_ref {
+    label "wf_teloseq"
+    cpus   1
+    memory '2 GB'
+    input:
+        tuple val(meta), path("reference.fasta")
+    output:
+        tuple val(meta), path("reference_trim.fasta"), emit: reference
+        tuple val(meta), path("cut_first.bed"), emit: cutsites
+    script:
+        """
+        cutadapt -a "${params.restriction_site}" -e 0 -o reference_trim.fasta reference.fasta
+        samtools faidx reference_trim.fasta
+        awk -F'\t' '{print \$1"\t0\t"\$2}' reference_trim.fasta.fai > cut_first.bed
+        """
 }
 
 process coverage_filter {
@@ -281,9 +288,10 @@ process coverage_filter {
     output:
         tuple val(meta), path("./filtered/filtered.bam"),path("./filtered/filtered.bam.bai"), path("./filtered/filtered_reference.fasta")
     //remove 2nd and third column not needed. and rename first column for report
-    """ 
-    workflow-glue filter_bam_reference input.bam input_reference.fasta filtered $coverage $task.cpus
-    """
+    script:
+        """ 
+        workflow-glue filter_bam_reference input.bam input_reference.fasta filtered $coverage $task.cpus
+        """
 }
 
 process coverage_filter2 {
@@ -296,9 +304,10 @@ process coverage_filter2 {
         tuple val(meta), path("./filtered/filtered.bam"),path("./filtered/filtered.bam.bai"), emit: alignment
         tuple val(meta), path("./filtered/filtered_reference.fasta"), emit: reference
     //remove 2nd and third column not needed. and rename first column for report
-    """ 
-    workflow-glue filter_bam_reference input.bam input_reference.fasta filtered $coverage $task.cpus
-    """
+    script:
+        """ 
+        workflow-glue filter_bam_reference input.bam input_reference.fasta filtered $coverage $task.cpus
+        """
 }
 
 process nm_filter {
@@ -316,7 +325,7 @@ process nm_filter {
     """
 }
 
-process mappingbam2 {
+process mappingbam {
     label "wf_teloseq"
     cpus 6
     memory '2 GB'
@@ -381,10 +390,10 @@ process cluster{
     output:
         tuple val(meta), path("clusterref.fasta"), emit: clusterref
     script:
-    """   
-    seqtk seq -A reads.fastq > reads.fasta
-    vsearch --cluster_fast reads.fasta --strand plus --threads $task.cpus --maxseqlength 200000 --id 0.96 --consout clusterref.fasta
-    """
+        """   
+        seqtk seq -A reads.fastq > reads.fasta
+        vsearch --cluster_fast reads.fasta --strand plus --threads $task.cpus --maxseqlength 200000 --id 0.96 --consout clusterref.fasta
+        """
 }
 
 //Extract contigs from clustering step using filters
@@ -401,17 +410,17 @@ process clusterfilt2 {
         tuple val(meta), path('clusterref/filtered_reference.fasta'), emit: reference
     
     script:
-    """
-    workflow-glue filter_bam_reference align.bam clusterref.fasta clusterref $coverage 4
-    samtools faidx clusterref.fasta
-    workflow-glue extract_reads_for_clustering ./clusterref/filtered.bam ./clusterref/filtered_reference.fasta vsearchset $coverage 40 40 1000 30 600
+        """
+        workflow-glue filter_bam_reference align.bam clusterref.fasta clusterref $coverage 4
+        samtools faidx clusterref.fasta
+        workflow-glue extract_reads_for_clustering ./clusterref/filtered.bam ./clusterref/filtered_reference.fasta vsearchset $coverage 40 40 1000 30 600
 
-    # Check if directory is empty or contains no txt files
-    if [ -z "\$(find clusterref -name '*.txt' 2>/dev/null)" ]; then
-        # If empty or no txt files, create a placeholder
-        touch vsearchset/placeholder.txt
-    fi
-    """
+        # Check if directory is empty or contains no txt files
+        if [ -z "\$(find clusterref -name '*.txt' 2>/dev/null)" ]; then
+            # If empty or no txt files, create a placeholder
+            touch vsearchset/placeholder.txt
+        fi
+        """
 }
 
 //Use blast to name de novo contigs
@@ -428,17 +437,17 @@ process name_contigs {
         tuple val(meta), path('summary_naming.csv'), emit: summary
     
     script:
-    """
-    # Check if blast.txt contains only a single header line
-    if [[ \$(wc -l < blast.txt) -eq 1 ]]; then
-        # If so, rename the reference and create an empty summary file
-        awk '/^>/ {print ">contig_" ++i; next} {print}' reference.fasta > final_reference.fasta
-        touch summary_naming.csv
-    else
-        # Otherwise, run the original script
-        workflow-glue name_fasta blast.txt reference.fasta final_reference.fasta summary_naming.csv ${params.motif_threshold} ${params.max_sstart} ${params.min_pident} ${params.exclude_chr_from_naming}
-    fi
-    """
+        """
+        # Check if blast.txt contains only a single header line
+        if [[ \$(wc -l < blast.txt) -eq 1 ]]; then
+            # If so, rename the reference and create an empty summary file
+            awk '/^>/ {print ">contig_" ++i; next} {print}' reference.fasta > final_reference.fasta
+            touch summary_naming.csv
+        else
+            # Otherwise, run the original script
+            workflow-glue name_fasta blast.txt reference.fasta final_reference.fasta summary_naming.csv ${params.motif_threshold} ${params.max_sstart} ${params.min_pident} ${params.exclude_chr_from_naming}
+        fi
+        """
 }
 
 //polish errors in genome
@@ -464,7 +473,7 @@ process polish_genome{
 }
 
 //identify telomere end in reference
-//get lsat telomere site in ref
+//get last telomere site in ref
 //tidy up file and remove header
 process telomere_sites{
     label "wf_teloseq"
@@ -475,10 +484,10 @@ process telomere_sites{
     output:
         tuple val(meta), path("telomere_boundaries.bed"), emit: telomerebed
     script:
-    """
-    workflow-glue get_telomere_boundaries_in_fastx tel_reference.fasta \
-        > telomere_boundaries.bed
-    """
+        """
+        workflow-glue get_telomere_boundaries_in_fastx tel_reference.fasta \
+            > telomere_boundaries.bed
+        """
 }
 
 process filtering {
@@ -526,25 +535,6 @@ process filtering {
     """
 }
 
-process telomere_lengths_raw {
-    label "wf_teloseq"
-    cpus   1
-    memory '2 GB'
-    input:
-        tuple val(meta), path("telomere.fastq")
-    output:
-        tuple val(meta), path("sample_raw_coverage.csv"), emit: covraw
-        tuple val(meta), path("sample_raw_per_read_telomere_length.csv"), emit: plotraw
-    script:
-    // Note: this assumes `telomere length == coordinate of telomere boundary` (i.e.
-    // that there is no sequence that is not telomere at the beginnings of the reads)
-    """
-    workflow-glue get_telomere_boundaries_in_fastx telomere.fastq \\
-        > telomere_read_length.txt
-    workflow-glue summarise_telomere_lengths --mode raw --telomere_lengths telomere_read_length.txt --output_prefix sample
-    """
-}
-
 process combine_ref {
     label "wf_teloseq"
     cpus 6
@@ -553,7 +543,7 @@ process combine_ref {
         tuple val(meta), path(input), path(resultFiles), val(coverage), path("filtered_reference.fasta")
     output:
         tuple val(meta), path("denovo_reference.fasta"), emit: ref1
-
+    script:
     """
     # Combine all result files
     cat $resultFiles > tmpref.fa
@@ -697,7 +687,7 @@ process makeReport {
 // publish files from a workflow whilst decoupling the publish from the process steps.
 // The process takes a tuple containing the filename and the name of a sub-directory to
 // put the file into. If the latter is `null`, puts it into the top-level directory.
-process output {
+process publish {
     // publish inputs to output directory
     label "wf_teloseq"
     cpus 1
@@ -711,8 +701,10 @@ process output {
         tuple path(fname), val(dirname)
     output:
         path fname
-    """
-    """
+    script:
+        """
+        echo "Writing output files"
+        """
 }
 
 process collectFilesInDir {
@@ -843,7 +835,6 @@ workflow pipeline {
         preprocessing = generic_preprocessing(samples)
         
         // Extract outputs from preprocessing
-        valid_samples_with_stats = preprocessing.valid_samples_with_stats
         software_versions = preprocessing.software_versions
         workflow_params = preprocessing.workflow_params
         metadata = preprocessing.metadata
@@ -858,12 +849,12 @@ workflow pipeline {
             // Collect results into directories to avoid collisions
             ch_results_for_report = ch_per_sample_results
                 | map {
-                    meta = it[0]
-                    rest = it[1..-1]
+                    def meta = it[0]
+                    def rest = it[1..-1]
                     [meta, rest, meta.alias]
                 }
                 | collectFilesInDir
-                | map { meta, dirname -> dirname }
+                | map { _meta, dirname -> dirname }
 
             // Generate the report
             mappingreport=false
@@ -907,16 +898,16 @@ workflow pipeline {
                 mapping_channel = processed_read_channel.join(filtered_channel)
 
                 // Mapping Back to Reference
-                mapping_output1_channel = mappingbam2(mapping_channel)
+                mapping_output = mappingbam(mapping_channel)
 
-                (clusterset, clusterref) = clusterfilt2(mappingbam2.out.alignment
+                (clusterset, clusterref) = clusterfilt2(mapping_output.alignment
                     | join(filtered_channel, by: 0)
                     | join(cov_filter, by: 0))
 
                 // Check for placeholder.txt indicating no additional clusters
                 if (clusterfilt2.out.clusters.any { it.toString().endsWith('placeholder.txt') }) {
                     // Filter for minimum sequences (0.15 of average coverage or user min_coverage)
-                    cov_filter_channel = coverage_filter(mappingbam2.out.alignment
+                    cov_filter_channel = coverage_filter(mapping_output.alignment
                         | join(filtered_channel, by: 0)
                         | join(cov_filter, by: 0))
 
@@ -938,7 +929,7 @@ workflow pipeline {
                     split_clusters = clusterset
                         .flatMap { tuple ->
                             metadata = tuple[0]
-                            paths = tuple[1]
+                            def paths = tuple[1]
                             paths.collect { path -> [metadata, path] }
                         }
 
@@ -1133,7 +1124,7 @@ workflow {
         pipeline.out.report.concat(pipeline.out.workflow_params)
         | map { [it, null] }
     )
-    | output
+    | publish
 
 }
 
