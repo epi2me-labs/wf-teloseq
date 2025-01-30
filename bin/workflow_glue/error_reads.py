@@ -14,7 +14,6 @@ def main(args):
         dtype={"seqID": str, "start": int},
     ).rename(columns={"start": "error_pos"})
 
-    # Import reference fai as dataframe for list of chr that should be in list
     telomere_locs_df = pd.read_csv(
         args.telomere_locations,
         sep="\t",
@@ -24,7 +23,7 @@ def main(args):
     # Merge by seqID
     merged_df = error_locs_df.merge(telomere_locs_df, on="seqID")
 
-    # Remove rows where with errors after the telomere boundary
+    # Remove rows with errors after the telomere boundary
     merged_df = merged_df[merged_df["error_pos"] <= merged_df["last_telomere_pos"]]
 
     # Prepare to write output to a file
@@ -45,14 +44,14 @@ def main(args):
 
 def argparser():
     """Argument parser for entrypoint."""
-    parser = wf_parser("ErrReads")
+    parser = wf_parser("error_reads")
     parser.add_argument(
         "telomere_locations",
         help="`seqkit locate` output file of telomeres",
     )
     parser.add_argument(
         "error_locations",
-        help="`seqkit locate` output file of erroneous k-mers",
+        help="`seqkit locate` output file of basecalling error motif locations.",
     )
     parser.add_argument(
         "output",

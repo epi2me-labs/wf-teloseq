@@ -29,6 +29,7 @@ def main(args):
 
             for search_seq in args.adapter_seqs.split(","):
                 search_seq_clean = re.sub(r"\W+", "", search_seq)
+                # NOTE compile each pattern first
                 match = re.search(search_seq_clean, sequence_fragment)
                 if match is not None and match.end() < earliest_end_pos:
                     earliest_end_pos = match.end()
