@@ -79,7 +79,7 @@
             "fa_icon": "fas fa-arrow-left",
             "description": "Parameters modifying TeloSeq pipeline behaviour",
             "properties": {
-                "skipmapping": {
+                "skip_mapping": {
                     "type": "boolean",
                     "default": false,
                     "description": "Skip mapping step for just sample only telomere length",

@@ -44,7 +44,7 @@ def main(args):
 
 def argparser():
     """Argument parser for entrypoint."""
-    parser = wf_parser("error_reads")
+    parser = wf_parser("ErrReads")
     parser.add_argument(
         "telomere_locations",
         help="`seqkit locate` output file of telomeres",

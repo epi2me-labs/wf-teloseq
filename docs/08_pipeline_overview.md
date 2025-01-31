@@ -50,7 +50,7 @@ Human cell lines, and individuals, have genetic variation in their sub-telomeric
 
 ## Run time
 
-Running a typical Telo-Seq dataset (4K telomere reads) through `wf-teloseq` with matching sample human chromosome arm mapping assignment takes approximately 5 minutes and non-matching >1 hr. When skipping the mapping stage (`--skipmapping`), it takes less than 3 minutes.
+Running a typical Telo-Seq dataset (4K telomere reads) through `wf-teloseq` with matching sample human chromosome arm mapping assignment takes approximately 5 minutes and non-matching >1 hr. When skipping the mapping stage (`--skip_mapping`), it takes less than 3 minutes.
 
 
 ## Running in Epi2me labs via Windows on a laptop 

@@ -161,7 +161,7 @@ input_reads.fastq   ─── input_directory  ─── input_directory
 
 | Nextflow parameter name  | Type | Description | Help | Default |
 |--------------------------|------|-------------|------|---------|
-| skipmapping | boolean | Skip mapping step for just sample only telomere length | If selected then the workflow will not run the mapping step but measure telomere length just on the unmapped telomere-subtelomere identified reads. | False |
+| skip_mapping | boolean | Skip mapping step for just sample only telomere length | If selected then the workflow will not run the mapping step but measure telomere length just on the unmapped telomere-subtelomere identified reads. | False |
 | denovo | boolean | Create reference from the data to map back to | Uses vsearch clustering and filtering steps to produce a denovo guided reference that is specific to the data sample. | False |
 
 
@@ -279,7 +279,7 @@ Human cell lines, and individuals, have genetic variation in their sub-telomeric
 
 ## Run time
 
-Running a typical Telo-Seq dataset (4K telomere reads) through `wf-teloseq` with matching sample human chromosome arm mapping assignment takes approximately 5 minutes and non-matching >1 hr. When skipping the mapping stage (`--skipmapping`), it takes less than 3 minutes.
+Running a typical Telo-Seq dataset (4K telomere reads) through `wf-teloseq` with matching sample human chromosome arm mapping assignment takes approximately 5 minutes and non-matching >1 hr. When skipping the mapping stage (`--skip_mapping`), it takes less than 3 minutes.
 
 
 ## Running in Epi2me labs via Windows on a laptop 
