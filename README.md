@@ -162,7 +162,6 @@ input_reads.fastq   ─── input_directory  ─── input_directory
 | Nextflow parameter name  | Type | Description | Help | Default |
 |--------------------------|------|-------------|------|---------|
 | skip_mapping | boolean | Skip mapping step for just sample only telomere length | If selected then the workflow will not run the mapping step but measure telomere length just on the unmapped telomere-subtelomere identified reads. | False |
-| denovo | boolean | Create reference from the data to map back to | Uses vsearch clustering and filtering steps to produce a denovo guided reference that is specific to the data sample. | False |
 
 
 ### Output Options

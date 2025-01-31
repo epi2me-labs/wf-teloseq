@@ -1,13 +1,10 @@
 #!/usr/bin/env nextflow
-
-import groovy.json.JsonBuilder
 nextflow.enable.dsl = 2
 
 include { fastq_ingress; xam_ingress } from './lib/ingress'
 include { getParams } from './lib/common'
 
-include { mapping as mapping1 } from './modules/local/common'
-include { mapping as mapping2 } from './modules/local/common'
+include { mapping } from './modules/local/common'
 include { fastq_stats as fastq_stats_all } from './modules/local/common'
 include { fastq_stats as fastq_stats_telo } from './modules/local/common'
 include { fastq_stats as fastq_stats_telo_subtelo } from './modules/local/common'
@@ -279,20 +276,6 @@ process trim_restriction_site_ref {
         """
 }
 
-process coverage_filter {
-    label "wf_teloseq"
-    cpus   4
-    memory '2 GB'
-    input:
-        tuple val(meta), path("input.bam"), path("input.bam.bai"), path("input_reference.fasta"), val(coverage)
-    output:
-        tuple val(meta), path("./filtered/filtered.bam"),path("./filtered/filtered.bam.bai"), path("./filtered/filtered_reference.fasta")
-    //remove 2nd and third column not needed. and rename first column for report
-    script:
-        """ 
-        workflow-glue filter_bam_reference input.bam input_reference.fasta filtered $coverage $task.cpus
-        """
-}
 
 process coverage_filter2 {
     label "wf_teloseq"
@@ -325,152 +308,6 @@ process nm_filter {
     """
 }
 
-process mappingbam {
-    label "wf_teloseq"
-    cpus 6
-    memory '2 GB'
-    input:
-        tuple val(meta), path("reads.fastq"), path("reference.fasta")
-    output:
-        tuple val(meta), path("telomere.bam"),path("telomere.bam.bai"), emit: alignment
-    script:
-    """
-    samtools faidx reference.fasta
-    minimap2 -ax map-ont -t $task.cpus reference.fasta reads.fastq | samtools sort -o telomere.bam && samtools index telomere.bam
-    """
-}
-
-//trim the pangenome to the enzyme cut site, then map to it. This will then be used for naming contigs later.
-process mapping_name {
-    label "wf_teloseq"
-    cpus 16
-    memory '2 GB'
-    input:
-        tuple val(meta), path("input.fasta")
-        path("naming.fasta")
-    output:
-        tuple val(meta), path("blast_output.tsv"), emit: blast
-    script:
-    """
-    cutadapt -j $task.cpus -a "${params.restriction_site}" -e 0 -o naming_trim.fasta naming.fasta
-    cutadapt -j $task.cpus -a "${params.restriction_site}" -e 0 -o input_ref.fasta input.fasta
-
-    makeblastdb -in naming_trim.fasta -dbtype nucl -out naming_trim_db
-
-    (echo -e "qseqid\tsseqid\tpident\tlength\tmismatch\tgapopen\tqstart\tqend\tsstart\tsend\tevalue\tbitscore";
-    blastn -query input_ref.fasta -db naming_trim_db -outfmt "6 qseqid sseqid pident length mismatch gapopen qstart qend sstart send evalue bitscore" -max_target_seqs 9 -num_threads 8 
-    ) > blast_output.tsv
-    """
-}
-
-//added skip for subtelomere GC content filtering if 2 or less contigs with specific GC content as these are underrpresented
-//Script filters reference for low representation cluster contigs and extends telomere which affects mapping.
-process filter_cluster {
-    label "wf_teloseq"
-    cpus 1
-    memory '2 GB'
-    input:
-        tuple val(meta), path("referenceC1.fasta"), val(coverage)
-    output:
-        tuple val(meta), path("referenceC2.fasta"), emit: clusterreffilt
-    script:
-    """
-    workflow-glue min_vsearch referenceC1.fasta referenceC1a.fasta $coverage
-    workflow-glue extend_telomere referenceC1a.fasta TAACCC ${params.telomere_extension} > referenceC2.fasta
-    """
-}
-
-//cluster telomere reads and produce consensus sequences
-process cluster{
-    label "wf_teloseq"
-    cpus   16
-    memory '16 GB'
-    input:
-        tuple val(meta), path("reads.fastq")
-    output:
-        tuple val(meta), path("clusterref.fasta"), emit: clusterref
-    script:
-        """   
-        seqtk seq -A reads.fastq > reads.fasta
-        vsearch --cluster_fast reads.fasta --strand plus --threads $task.cpus --maxseqlength 200000 --id 0.96 --consout clusterref.fasta
-        """
-}
-
-//Extract contigs from clustering step using filters
-process clusterfilt2 {
-    label "wf_teloseq"
-    cpus   4
-    memory '2 GB'
-    
-    input:
-        tuple val(meta), path("align.bam"), path("align.bam.bai"), path("clusterref.fasta"), val(coverage)
-
-    output:
-        tuple val(meta), path('clusterref/*read_ids.txt'), emit: clusters
-        tuple val(meta), path('clusterref/filtered_reference.fasta'), emit: reference
-    
-    script:
-        """
-        workflow-glue filter_bam_reference align.bam clusterref.fasta clusterref $coverage 4
-        samtools faidx clusterref.fasta
-        workflow-glue extract_reads_for_clustering ./clusterref/filtered.bam ./clusterref/filtered_reference.fasta vsearchset $coverage 40 40 1000 30 600
-
-        # Check if directory is empty or contains no txt files
-        if [ -z "\$(find clusterref -name '*.txt' 2>/dev/null)" ]; then
-            # If empty or no txt files, create a placeholder
-            touch vsearchset/placeholder.txt
-        fi
-        """
-}
-
-//Use blast to name de novo contigs
-process name_contigs {
-    label "wf_teloseq"
-    cpus   2
-    memory '8 GB'
-    
-    input:
-        tuple val(meta), path("blast.txt"), path("reference.fasta")
-    
-    output:
-        tuple val(meta), path('final_reference.fasta'), emit: reference
-        tuple val(meta), path('summary_naming.csv'), emit: summary
-    
-    script:
-        """
-        # Check if blast.txt contains only a single header line
-        if [[ \$(wc -l < blast.txt) -eq 1 ]]; then
-            # If so, rename the reference and create an empty summary file
-            awk '/^>/ {print ">contig_" ++i; next} {print}' reference.fasta > final_reference.fasta
-            touch summary_naming.csv
-        else
-            # Otherwise, run the original script
-            workflow-glue name_fasta blast.txt reference.fasta final_reference.fasta summary_naming.csv ${params.motif_threshold} ${params.max_sstart} ${params.min_pident} ${params.exclude_chr_from_naming}
-        fi
-        """
-}
-
-//polish errors in genome
-process polish_genome{
-    label "wf_teloseq"
-    cpus   2
-    memory '2 GB'
-    input:
-        tuple val(meta), path("align.bam"), path("align.bam.bai"), path("reference.fasta")
-    output:
-        tuple val(meta), path("consensus.fasta"), emit: reference
-    script:
-    """
-    samtools faidx reference.fasta
-    freebayes -f reference.fasta align.bam > varnew.vcf
-    bgzip varnew.vcf
-    tabix -p vcf varnew.vcf.gz
-    bcftools filter -i 'AF > 0.7' varnew.vcf.gz > varnew2.vcf
-    bgzip varnew2.vcf
-    tabix -p vcf varnew2.vcf.gz
-    bcftools consensus -f reference.fasta -o consensus.fasta varnew2.vcf.gz
-    """
-}
 
 //identify telomere end in reference
 //get last telomere site in ref
@@ -535,34 +372,6 @@ process filtering {
     """
 }
 
-process combine_ref {
-    label "wf_teloseq"
-    cpus 6
-    memory '8 GB'
-    input: 
-        tuple val(meta), path(input), path(resultFiles), val(coverage), path("filtered_reference.fasta")
-    output:
-        tuple val(meta), path("denovo_reference.fasta"), emit: ref1
-    script:
-    """
-    # Combine all result files
-    cat $resultFiles > tmpref.fa
-    
-    # Check if we have any sequences
-    if [ ! -s tmpref.fa ]; then
-        echo "Warning: No sequences found in consensus files"
-        # Use filtered_reference.fasta as the denovo reference
-        cp filtered_reference.fasta denovo_reference.fasta
-    else
-        # Process as normal
-        workflow-glue extend_telomere tmpref.fa TAACCC ${params.telomere_extension} > tmpref_extend.fa
-        workflow-glue min_vsearch tmpref_extend.fa tmpref_extend2.fa $coverage
-        cat tmpref_extend2.fa filtered_reference.fasta \
-        | seqkit rmdup -n -o - \
-        | awk -v rs="${params.restriction_site}" '/^>/{if(seq!=""){print seq rs}; print; seq=""; next} {seq=seq""\$0} END{print seq rs}' > denovo_reference.fasta
-    fi
-    """
-}
 
 process results {
     label "wf_teloseq"
@@ -607,39 +416,6 @@ process results {
 }
 
 
-process clusterAndExtractR1 {
-    label "wf_teloseq"
-    cpus 4
-    memory '13 GB'
-    input:
-        tuple val(meta), path(clusterFile), path("reads.fastq"), val(coverage)
-    output:
-        tuple val(meta), path ("${clusterFile}.consensus_highestseqs.fasta") , emit: results
-    script:
-    """
-    #get reads to cluster
-    seqkit grep -f $clusterFile reads.fastq | seqtk seq -A > ${clusterFile}.fasta
-
-    vsearch --cluster_fast ${clusterFile}.fasta --strand plus --threads $task.cpus --maxseqlength 200000 --id 0.96 --consout ${clusterFile}.consensus.fasta
-    
-    # Check if consensus file exists and has content
-    if [ ! -s ${clusterFile}.consensus.fasta ]; then
-        echo "Warning: Consensus file is empty after vsearch clustering"
-        # Create an empty consensus file - this is valid as it will be filtered out later
-        touch ${clusterFile}.consensus_highestseqs.fasta
-    else
-        # Only run min_vsearch if we have input sequences
-        workflow-glue min_vsearch ${clusterFile}.consensus.fasta ${clusterFile}.consensus_highestseqs.fasta $coverage
-        
-        # If min_vsearch produces empty output, create empty file
-        if [ ! -s ${clusterFile}.consensus_highestseqs.fasta ]; then
-            echo "Warning: No sequences passed min_vsearch filter"
-            touch ${clusterFile}.consensus_highestseqs.fasta
-        fi
-    fi
-    """
-}
-
 // Make report html file using staged file dir and other files
 process makeReport {
     label "wf_teloseq"
@@ -670,17 +446,17 @@ process makeReport {
                 n_seqs: meta.n_seqs
             ]
         }
-        def json_str = new JsonBuilder(simplified_meta).toPrettyString()
-    """
-    echo '${json_str}' > metadata.json
+        def json_str = new groovy.json.JsonBuilder(simplified_meta).toPrettyString()
+        """
+        echo '${json_str}' > metadata.json
 
-    workflow-glue report $report_name \\
-        --metadata metadata.json \\
-        --versions versions \\
-        --params params.json \\
-        --data data \\
-        $extra_arg
-    """
+        workflow-glue report $report_name \\
+            --metadata metadata.json \\
+            --versions versions \\
+            --params params.json \\
+            --data data \\
+            $extra_arg
+        """
 }
 
 // See https://github.com/nextflow-io/nextflow/issues/1636. This is the only way to
@@ -881,102 +657,10 @@ workflow pipeline {
             processed_read_channel = trim_restriction_site(trimmed_fastq_channel)
 
             ////////////////////////////////////////////
-            // De Novo Assemble Reference and Map
-            ////////////////////////////////////////////
-
-            if (params.denovo) {
-                // Cluster Reads and Produce Reference
-                cluster_channel = cluster(processed_read_channel)
-
-                //Create filter channel
-                filter_channel = cluster_channel.join(cov_filter)
-
-                // Clustering Reference Filter
-                filtered_channel = filter_cluster(filter_channel)
-
-                // Create mapping channel
-                mapping_channel = processed_read_channel.join(filtered_channel)
-
-                // Mapping Back to Reference
-                mapping_output = mappingbam(mapping_channel)
-
-                (clusterset, clusterref) = clusterfilt2(mapping_output.alignment
-                    | join(filtered_channel, by: 0)
-                    | join(cov_filter, by: 0))
-
-                // Check for placeholder.txt indicating no additional clusters
-                if (clusterfilt2.out.clusters.any { it.toString().endsWith('placeholder.txt') }) {
-                    // Filter for minimum sequences (0.15 of average coverage or user min_coverage)
-                    cov_filter_channel = coverage_filter(mapping_output.alignment
-                        | join(filtered_channel, by: 0)
-                        | join(cov_filter, by: 0))
-
-                    // Polish genome
-                    polish_channel = polish_genome(cov_filter_channel)
-
-                    // Define naming file
-                    Path naming = file(params.naming_file ?: "$projectDir/test_data/pangenome_ont_v1.fasta.gz", checkIfExists: true)
-                    
-                    // Run BLAST to match chromosome names
-                    mapping_name(polish_channel, naming)
-
-                    // Name de novo contigs
-                    name_contigs(mapping_name.out.blast
-                        | join (polish_channel))
-
-                } else {
-                    // Separate each subset read file into a tuple
-                    split_clusters = clusterset
-                        .flatMap { tuple ->
-                            metadata = tuple[0]
-                            def paths = tuple[1]
-                            paths.collect { path -> [metadata, path] }
-                        }
-
-
-                    // Combine channels for clustering
-                    clusterchannel = split_clusters.join(processed_read_channel, by: 0)
-                        .join(cov_filter, by: 0)
-
-                    // Perform clustering and extraction
-                    clusterout = clusterAndExtractR1(clusterchannel)
-                        .groupTuple()
-
-                    // Concatenate and filter for support above threshold
-                    combine_channel = combine_ref(processed_read_channel
-                        | join(clusterout, by: 0)
-                        | join(cov_filter, by: 0)
-                        | join(clusterref, by: 0))
-
-                    // Apply mapping quality filter
-                    mapping2(processed_read_channel.join(combine_channel))
-
-                    // Filter for minimum sequences (0.15 of average coverage or user provided min_coverage)
-                    cov_filter_channel = coverage_filter(mapping2.out.alignment
-                        | join (combine_channel, by: 0)
-                        | join (cov_filter, by: 0))
-
-                    // Polish genome
-                    polish_channel = polish_genome(cov_filter_channel)
-
-                    // Define naming file
-                    Path naming = file(params.naming_file ?: "$projectDir/test_data/pangenome_ont_v1.fasta.gz", checkIfExists: true)
-                    
-                    // Run BLAST to match chromosome names
-                    mapping_name(polish_channel, naming)
-
-                    // Name de novo contigs
-                    name_contigs(mapping_name.out.blast
-                        | join(polish_channel))
-                }
-            }
-
-            ////////////////////////////////////////////
             // Map to Reference and Generate Results
             ////////////////////////////////////////////
 
-            // Use either the final denovo reference or the user supplied reference that has telomere ends extracted
-            reference_channel2 = params.denovo ? name_contigs.out.reference : check_reference.out.reference
+            reference_channel2 = check_reference.out.reference
 
             // Trim reads by restriction site for reference
             trim_restriction_site_ref(reference_channel2)
@@ -985,10 +669,10 @@ workflow pipeline {
             telo_site_channel = telomere_sites(trim_restriction_site_ref.out.reference)
 
             //map filtered telomere reads to genome and filter using mapq (default=4)
-            mapping1(processed_read_channel.join(trim_restriction_site_ref.out.reference))
+            mapping(processed_read_channel.join(trim_restriction_site_ref.out.reference))
 
             //Remove incorrectly mapped reads via NM
-            nm_filter(mapping1.out.alignment)
+            nm_filter(mapping.out.alignment)
 
             //filter for min sequences 10 (0.15 of average coverage).
             coverage_filter2(nm_filter.out.alignment
@@ -1052,12 +736,6 @@ workflow pipeline {
                 )
 
             if (!params.skip_mapping) {
-                if (params.denovo) {
-                    ch_to_publish = ch_to_publish | mix(
-                        // De novo contig naming summary
-                        name_contigs.out.summary.map { meta, csv -> [csv, "${meta.alias}/reference_naming"] }.transpose()
-                    )
-                }
 
                 ch_to_publish = ch_to_publish | mix(
                     // Mapped CSV files
