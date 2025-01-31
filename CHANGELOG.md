@@ -15,6 +15,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Lenient filter extended to 2000 bp and if cut site before this then switch to cut site. This reduces some very low level mismapping tolerance. 
 - Lenient and strict filter changed to high and low stringency renaming.
 
+### Removed
+- Removed the "de novo" guided route. This will be added back in v0.1. 
+
 
 ## [v0.0.4]
 ### Changed
