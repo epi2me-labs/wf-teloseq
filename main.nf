@@ -845,7 +845,7 @@ workflow pipeline {
         telomere_lengths_plotraw_channel = preprocessing.telomere_lengths_plotraw_channel
         reference_channel = preprocessing.reference_channel
         
-        if (params.skipmapping) {
+        if (params.skip_mapping) {
             // Collect results into directories to avoid collisions
             ch_results_for_report = ch_per_sample_results
                 | map {
@@ -1051,7 +1051,7 @@ workflow pipeline {
                     telomere_lengths_plotraw_channel.map { meta, csv -> [csv, "${meta.alias}/results"] }.transpose()
                 )
 
-            if (!params.skipmapping) {
+            if (!params.skip_mapping) {
                 if (params.denovo) {
                     ch_to_publish = ch_to_publish | mix(
                         // De novo contig naming summary

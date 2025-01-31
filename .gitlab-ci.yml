@@ -20,21 +20,57 @@ docker-run:
     matrix:
       - MATRIX_NAME: [
           "defaults",
-          "skipmapping",
+          "bam_in",
+          "skip_mapping",
+          "non_telomeric_reads",
+          "missing_reference",
+          "mapq61",
+          "sample_sheet_same",
+          "sample_sheet_diff"
         ]
   rules:
     # NOTE As we're overriding the rules block for the included docker-run
     #   we must redefine this CI_COMMIT_BRANCH rule to prevent docker-run
     #   being incorrectly scheduled for "detached merge request pipelines" etc.
-    #
-    #   TODO: revise all the ignored processes here, just dumped things in to get CI to pass
     - if: ($CI_COMMIT_BRANCH == null || $CI_COMMIT_BRANCH == "dev-template")
       when: never
     - if: $MATRIX_NAME == "defaults"
       variables:
-        # use default args defined above
         NF_IGNORE_PROCESSES: polish_genome,cluster,clusterAndExtractR1,clusterfilt2,combine_ref,coverage_filter,filter_cluster,mapping_name,mappingbam,name_contigs
-    - if: $MATRIX_NAME == "skipmapping"
+        AFTER_NEXTFLOW_CMD: 'cmp -s test_data/expected_out/expected_default_output.csv wf-teloseq/HG002_small_test/results/results_combined_summary.csv || { echo "expected output was different"; exit 1; }'
+    - if: $MATRIX_NAME == "bam_in"
       variables:
-        NF_WORKFLOW_OPTS: "--fastq test_data/HG002_small_test.fastq.gz --skipmapping"
+        NF_WORKFLOW_OPTS: "--bam test_data/samples/"
         NF_IGNORE_PROCESSES: polish_genome,check_reference,cluster,clusterAndExtractR1,clusterfilt2,combine_ref,coverage_filter,coverage_filter2,filter_cluster,filtering,mapping_name,mappingbam,name_contigs,nm_filter,results,telomere_sites,trim_restriction_site,trim_restriction_site_ref
+    - if: $MATRIX_NAME == "skip_mapping"
+      variables:
+        NF_WORKFLOW_OPTS: "--fastq test_data/HG002_small_test.fastq.gz --skip_mapping"
+        NF_IGNORE_PROCESSES: polish_genome,check_reference,cluster,clusterAndExtractR1,clusterfilt2,combine_ref,coverage_filter,coverage_filter2,filter_cluster,filtering,mapping_name,mappingbam,name_contigs,nm_filter,results,telomere_sites,trim_restriction_site,trim_restriction_site_ref
+    - if: $MATRIX_NAME == "non_telomeric_reads"
+      variables:
+        NF_WORKFLOW_OPTS: "--bam test_data/non_telomeric_1000.bam --skip_mapping"
+        NF_IGNORE_PROCESSES: collectFilesInDir,coverage_calc,filter_motifs,filter_nontelomeres,filter_reads,makeReport,subtelomere,telomere_lengths_raw,trim_adapters,polish_genome,check_reference,cluster,clusterAndExtractR1,clusterfilt2,combine_ref,coverage_filter,coverage_filter2,filter_cluster,filtering,mapping_name,mappingbam,name_contigs,nm_filter,results,telomere_sites,trim_restriction_site,trim_restriction_site_ref
+    - if: $MATRIX_NAME == "non_telomeric_reads"
+      variables:
+        NF_WORKFLOW_OPTS: "--bam test_data/non_telomeric_1000.bam --reference data/HG002qpMP_reference.fasta.gz"
+        NF_IGNORE_PROCESSES: polish_genome,cluster,clusterAndExtractR1,clusterfilt2,combine_ref,coverage_filter,filter_cluster,mapping_name,mappingbam,name_contigs
+    - if: $MATRIX_NAME == "missing_reference"
+      variables:
+        NF_WORKFLOW_OPTS: "--fastq test_data/HG002_small_test.fastq.gz --reference im_not_here.fasta.gz"
+        ASSERT_NEXTFLOW_FAILURE: "yes"
+    # Check the mapq quality filter does something
+    - if: $MATRIX_NAME == "map61"
+      variables:
+        NF_WORKFLOW_OPTS: "--fastq test_data/HG002_small_test.fastq.gz --reference data/HG002qpMP_reference.fasta.gz "
+        ASSERT_NEXTFLOW_FAILURE: "yes"
+        ASSERT_NEXTFLOW_FAILURE_REXP : "Error executing process > 'pipeline:filtering (1)"
+    - if: $MATRIX_NAME == "sample_sheet_same"
+      variables:
+        NF_WORKFLOW_OPTS: "--bam test_data/samples --sample_sheet test_data/sample_sheet_same_ref.csv"
+        NF_IGNORE_PROCESSES: polish_genome,cluster,clusterAndExtractR1,clusterfilt2,combine_ref,coverage_filter,filter_cluster,mapping_name,mappingbam,name_contigs
+    - if: $MATRIX_NAME == "sample_sheet_diff"
+      variables:
+        NF_WORKFLOW_OPTS: "--bam test_data/samples --sample_sheet test_data/sample_sheet_different_ref.csv"
+        NF_IGNORE_PROCESSES: polish_genome,cluster,clusterAndExtractR1,clusterfilt2,combine_ref,coverage_filter,filter_cluster,mapping_name,mappingbam,name_contigs
+        
+    
