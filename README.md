@@ -175,10 +175,6 @@ input_reads.fastq   ─── input_directory  ─── input_directory
 
 | Nextflow parameter name  | Type | Description | Help | Default |
 |--------------------------|------|-------------|------|---------|
-| adapters_to_trim | string | Comma-delimited list of sequencing adapters to be trimmed up to but not including. | Uses telomere so all adapter is trimmed off the ends of the telomere containing end of reads. | CACCCTAACCCTAACCCTAACC,CAACCCTAACCCTAACCCTAAC,CCTAACCCTAACCCTAACCCTA,CCCTAACCCTAACCCTAACCCT,CTAACCCTAACCCTAACCCTAA,CCCCTAACCCTAACCCTAACCC |
-| filter_error_motifs | string | Comma-delimited list of telomere error motifs for filtering | If more than `--filter_error_motifs_max_count` telomere error motifs are found within a window of size `--filter_error_motifs_window_size` in a telomere read, it is dropped from the analysis. | GTATAG,CGCGCGCG,CCACCG,AGCGACAG,ATAAGT,CCTCGTCC,TATAGT,AGTACT,GAGTCC,TATAGT,TATACA,TGGTCC,CTCTCCTCT |
-| filter_error_motifs_max_count | integer | Number of erroneous telomere k-mers to remove read. | If more than this number of telomere error motifs are found within a window of size `--filter_error_motifs_window_size` in the telomeric region of a read, it is dropped from the analysis. | 5 |
-| filter_error_motifs_window_size | integer | Size of window for filtering based on telomere error motifs. | If more than `--filter_error_motifs_max_count` telomere error motifs are found within a window of this length in the telomeric region of a read, it is dropped from the analysis. | 500 |
 | mapq | integer | Mapping quality filter parameter | Mapping quality used to filter the BAM file | 4 |
 | min_coverage_percent | integer | Minimum percentage coverage of total telomere reads per chr arm for filtering | Used in minimum coverage calculation for telomere reads using number of chromosome arms | 15 |
 | min_length | integer | Minimum read length for filtering | Used in initial filtering of reads. | 100 |

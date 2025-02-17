@@ -36,19 +36,4 @@ process fastq_stats {
         | tr -s ' ' '\t' > ${output_name}
         """
 }
-process filter_motifs_reads {
-    label "wf_teloseq"
-    cpus 1
-    memory "2 GB"
 
-    input:
-        tuple val(meta), path("reads.fastq"), path("remove_ids.txt")
-
-    output:
-        tuple val(meta), path("telomere_reads.fastq")
-
-    script:
-        """
-        seqkit grep -v -f remove_ids.txt reads.fastq > telomere_reads.fastq
-        """
-}

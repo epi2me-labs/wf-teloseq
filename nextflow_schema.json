@@ -108,30 +108,6 @@
             "description": "Advanced options for configuring processes inside the workflow.",
             "help_text": "These advanced options do not need to be changed for typical use, but allow fine tuning of workflows for users who want more control over the workflow.",
             "properties": {
-                "adapters_to_trim": {
-                    "type": "string",
-                    "default": "CACCCTAACCCTAACCCTAACC,CAACCCTAACCCTAACCCTAAC,CCTAACCCTAACCCTAACCCTA,CCCTAACCCTAACCCTAACCCT,CTAACCCTAACCCTAACCCTAA,CCCCTAACCCTAACCCTAACCC",
-                    "description": "Comma-delimited list of sequencing adapters to be trimmed up to but not including.",
-                    "help_text": "Uses telomere so all adapter is trimmed off the ends of the telomere containing end of reads."
-                },
-                "filter_error_motifs": {
-                    "type": "string",
-                    "default": "GTATAG,CGCGCGCG,CCACCG,AGCGACAG,ATAAGT,CCTCGTCC,TATAGT,AGTACT,GAGTCC,TATAGT,TATACA,TGGTCC,CTCTCCTCT",
-                    "description": "Comma-delimited list of telomere error motifs for filtering",
-                    "help_text": "If more than `--filter_error_motifs_max_count` telomere error motifs are found within a window of size `--filter_error_motifs_window_size` in a telomere read, it is dropped from the analysis."
-                },
-                "filter_error_motifs_max_count": {
-                    "type": "integer",
-                    "default": 5,
-                    "description": "Number of erroneous telomere k-mers to remove read.",
-                    "help_text": "If more than this number of telomere error motifs are found within a window of size `--filter_error_motifs_window_size` in the telomeric region of a read, it is dropped from the analysis."
-                },
-                "filter_error_motifs_window_size": {
-                    "type": "integer",
-                    "default": 500,
-                    "description": "Size of window for filtering based on telomere error motifs.",
-                    "help_text": "If more than `--filter_error_motifs_max_count` telomere error motifs are found within a window of this length in the telomeric region of a read, it is dropped from the analysis."
-                },
                 "mapq": {
                     "type": "integer",
                     "default": 4,
