@@ -9,13 +9,13 @@ Reads passing all checks are emitted to stdout.
 from collections import Counter
 import csv
 import enum
+import re
 import sys
 
 import edlib
 import numpy as np
 import pandas as pd
 import pysam
-import regex
 from scipy import ndimage
 
 from .util import wf_parser  # noqa: ABS101
@@ -40,7 +40,7 @@ ERROR_MOTIFS = {
     "CTCTCCTCT",
 }
 #  Regex pattern for error detection
-ERROR_MOTIF_REGEX = regex.compile("(?=(" + "|".join(ERROR_MOTIFS) + "))")
+ERROR_MOTIF_REGEX = re.compile("(?=(" + "|".join(ERROR_MOTIFS) + "))")
 
 # we would hope these have been removed by the basecaller, but we
 # allow the option to do it here.
@@ -108,7 +108,7 @@ def find_telo_boundary(
     # find motif
     motifs = np.zeros(len(record.sequence), dtype=int)
     matches = 0
-    for match in regex.finditer(motif, record.sequence):
+    for match in re.finditer(motif, record.sequence):
         matches += 1
         motifs[match.start(): match.end()] = 1
 
