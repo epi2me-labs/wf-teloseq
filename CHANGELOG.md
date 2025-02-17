@@ -14,9 +14,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Re-written the de novo guided route to be fully de novo.
 - Lenient filter extended to 2000 bp and if cut site before this then switch to cut site. This reduces some very low level mismapping tolerance. 
 - Lenient and strict filter changed to high and low stringency renaming.
+- The filtering the input data has been refactored, and boundary detection has been altered. This has removed several processes, collapsing them all down into one.
+
 
 ### Removed
-- Removed the "de novo" guided route. This will be added back in v0.1. 
+- Removed the "de novo" guided route.
 
 
 ## [v0.0.4]

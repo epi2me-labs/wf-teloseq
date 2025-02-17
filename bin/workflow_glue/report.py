@@ -6,7 +6,6 @@ import re
 from bokeh.io import output_file, save
 from bokeh.models import ColumnDataSource, Range1d
 from dominate import tags
-import ezcharts as ezc
 from ezcharts.components.ezchart import EZChart
 from ezcharts.components.fastcat import SeqSummary
 from ezcharts.components.reports import labs
@@ -34,17 +33,15 @@ def gather_sample_files(sample_details, args):
             if os.path.exists(os.path.join(
                 sample_dir, "sample_raw_per_read_telomere_length.csv"))
             else None,
-            "rawstats": os.path.join(sample_dir, "raw.txt")
-            if os.path.exists(os.path.join(sample_dir, "raw.txt"))
+            "telsubstats": os.path.join(sample_dir, "subtelomere_reads_stats.txt")
+            if os.path.exists(os.path.join(sample_dir, "subtelomere_reads_stats.txt"))
             else None,
-            "telstats": os.path.join(sample_dir, "telomere.txt")
-            if os.path.exists(os.path.join(sample_dir, "telomere.txt"))
-            else None,
-            "telsubstats": os.path.join(sample_dir, "telomere_subtelomere.txt")
-            if os.path.exists(os.path.join(sample_dir, "telomere_subtelomere.txt"))
-            else None,
-            "subtellen": os.path.join(sample_dir, "subtelomere.txt")
-            if os.path.exists(os.path.join(sample_dir, "subtelomere.txt"))
+            "subtellen": os.path.join(sample_dir,
+                                      "sample_raw_per_read_telomere_length.csv"
+                                      )
+            if os.path.exists(os.path.join(sample_dir,
+                                           "sample_raw_per_read_telomere_length.csv"
+                                           ))
             else None
         }
     return sample_files
@@ -324,26 +321,15 @@ def main(args):
                 DataTable.from_pandas(df)
 
     with report.add_section("Read no.", "Read no."):
-        tags.p("Statistics on complete set of reads supplied to pipeline, the second \
-        row are those reads that have identified telomere (x10 repeats) within the \
-        first 60-500bp, and the third row is a further subset row 2 reads that \
-        should not have telomere sequence (telomere repeats x4) in the last 70bp \
-        as shortest cut site is beyond this so should have at least this amount \
-        of sequence at end that is not telomere and don't want telomere only reads.")
+        tags.p("""Statistics on reads that have been passed filtering and have been
+                identified as spanning the telomere repeat boundary""")
         tabs = Tabs()
         for d, files in sample_files.items():
             with tabs.add_tab(d):
-                df1 = load_csv_with_default(files["rawstats"], sep="\t", header=0)
-                df2 = load_csv_with_default(
-                    files["telstats"], sep="\t", header=None, skiprows=1)
-                df2.columns = df1.columns
-                df3 = load_csv_with_default(
-                    files["telsubstats"], sep="\t", header=None, skiprows=1
+                df = load_csv_with_default(
+                    files["telsubstats"], sep="\t"
                 )
-                df3.columns = df1.columns
-                # Concatenate the DataFrames vertically (along rows) into final_df
-                df1 = pd.concat([df1, df2, df3], ignore_index=True)
-                DataTable.from_pandas(df1, use_index=False)
+                DataTable.from_pandas(df, use_index=False)
 
     # raw and telomere filtered read statistics section
     if not args.mappingreport:
@@ -412,30 +398,6 @@ def main(args):
                     if df.columns[0] == 'Unnamed: 0':
                         df.rename(columns={'Unnamed: 0': 'Filter'}, inplace=True)
                     DataTable.from_pandas(df, use_index=False)
-
-    with report.add_section("Subtelomere", "Subtelomere"):
-        tags.p("Plotting read lengths after trimming the telomere off the reads \
-        that have been subsetted as having telomere and non-telomere ends. \
-        This can aid in diagnosis of prep issues if high proportion of \
-        short subtelomeres which would not be typical of your sample.")
-        tabs = Tabs()
-
-        for d, files in sample_files.items():
-            with tabs.add_tab(d):
-                sub_tel_lengths = np.loadtxt(files['subtellen'])
-                # Calculate 1st and 98th percentiles
-                lower_bound = np.percentile(sub_tel_lengths, 1)  # 1st percentile
-                upper_bound = np.percentile(sub_tel_lengths, 98)  # 98th percentile
-
-                # Filter data to remove outliers
-                filtered_lengths = sub_tel_lengths[
-                    (sub_tel_lengths >= lower_bound) & (sub_tel_lengths <= upper_bound)
-                ]
-                plt = ezc.histplot(filtered_lengths, bins=1000)
-                plt.xAxis.name = 'Subtelomere Length'
-                plt.yAxis.name = 'Number of reads'
-                plt.title = {"text": "Subtelomere Length Histogram"}
-                EZChart(plt)
 
     if args.mappingreport:
         with report.add_section("Telomere len", "Telomere len"):
