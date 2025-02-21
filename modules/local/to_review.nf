@@ -63,6 +63,7 @@ process coverage_filter2 {
     label "wf_teloseq"
     cpus   4
     memory '2 GB'
+    publishDir "${params.out_dir}/${meta.alias}/alignment", overwrite: true
     input:
         tuple val(meta), path("input.bam"), path("input.bam.bai"), path("input_reference.fasta"), val(coverage)
     output:
@@ -113,6 +114,7 @@ process filtering {
     label "wf_teloseq"
     cpus   1
     memory '2 GB'
+    publishDir "${params.out_dir}/${meta.alias}/alignment", mode: 'copy', overwrite: true
     input:
         tuple val(meta), path("align.bam"), path("align.bam.bai"), path("cut_sites.bed"), path("telomere_sites.txt")
         val(telomere_margin)
@@ -154,10 +156,12 @@ process filtering {
     """
 }
 
+
 process results {
     label "wf_teloseq"
     cpus   1
     memory '2 GB'
+    publishDir "${params.out_dir}/${meta.alias}/read_stats", mode: 'copy', overwrite: true
     input:
         tuple val(meta),
             path("tagged.bam"),
@@ -165,16 +169,11 @@ process results {
             path("raw_coverage.csv"),
             val(coverage),
             path("mapping_ref.fasta")
+    // Emit files named for each sample, as these are all dumped into the report
     output:
         tuple val(meta),
-            path("results_HS_chr_arm_coverage.csv"),
-            path("results_HS_per_read_telomere_length.csv"),
-            path("results_LS_chr_arm_coverage.csv"),
-            path("results_LS_per_read_telomere_length.csv"),
-            path("results_NS_chr_arm_coverage.csv"),
-            path("results_NS_per_read_telomere_length.csv"),
-            path("results_combined_summary.csv"),
-            emit: for_report
+        path("${meta.alias}_results"),
+        emit: for_report
     script:
     //search for locations of telomere sequences (x5 repeats) in individual reads.
     //Reverse locations file to select last occurance of each telomere match, thereby selecting end position of telomere.
@@ -192,6 +191,9 @@ process results {
         --ref_fai mapping_ref.fasta.fai \\
         --min_coverage $coverage \\
         --telomere_lengths telomere_read_length.txt \\
-        --output_prefix results
+        --output_prefix ${meta.alias}
+
+    mkdir -p ${meta.alias}_results
+    mv *.csv ${meta.alias}_results
     """
 }

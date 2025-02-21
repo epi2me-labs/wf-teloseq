@@ -140,7 +140,7 @@ def find_telo_boundary(
     boundary = None
     min_value = np.min(edges)
     if min_value < filter_width * len(motif):
-        boundary = np.where(edges == min_value)[0][-1]
+        boundary = np.where(edges == min_value)[0][-1] + width
     else:
         return None, BoundaryFinder.CannotAnalyse
 
@@ -358,13 +358,15 @@ def main(args):
     summary_df = process_telomere_stats(
         boundaries
     )
-    summary_df.to_csv("sample_raw_coverage.csv", index=False)
-    # Wrire telomeric sequence lengths to CSV
-    dump_to_csv(
-        "sample_raw_per_read_telomere_length.csv",
-        boundaries,
-        ("Read ID", "Telomere_length"),
-    )
+    if summary_df is not None:
+        summary_df.to_csv("sample_raw_coverage.csv", index=False)
+    if boundaries:
+        # Wrire telomeric sequence lengths to CSV
+        dump_to_csv(
+            "sample_raw_per_read_telomere_length.csv",
+            boundaries,
+            ("Read ID", "Telomere_length"),
+        )
     pretty_str = ", ".join(
         f"{key.name}: {value}" for key, value in boundary_result_count.items()
     )
@@ -388,7 +390,7 @@ def argparser():
         help="Minimum number of motif repeats to keep read.",
     )
     grp.add_argument(
-        "--min-qual-non-telo", type=int, default=10,
+        "--min-qual-non-telo", type=int, default=9,
         help="Minimum median qscore of non-telomeric region.",
     )
     grp.add_argument(

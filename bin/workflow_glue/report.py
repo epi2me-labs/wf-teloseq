@@ -1,6 +1,9 @@
 """Create workflow report."""
+
+from collections import defaultdict
 import json
 import os
+from pathlib import Path
 import re
 
 from bokeh.io import output_file, save
@@ -18,93 +21,36 @@ from scipy.stats import gaussian_kde
 from workflow_glue.util import get_named_logger, wf_parser
 
 
-def gather_sample_files(sample_details, args):
-    """Create dictionary for sample with paths to data files."""
-    sample_files = {}
-    for sample in sample_details:
-        sample_dir = os.path.join(args.data[0], sample["alias"])
-        sample_files[sample["alias"]] = {
-            "fastcat_stats": os.path.join(sample_dir, "fastcat_stats"),
-            "rawcov": os.path.join(sample_dir, "sample_raw_coverage.csv")
-            if os.path.exists(os.path.join(sample_dir, "sample_raw_coverage.csv"))
-            else None,
-            "rawlen": os.path.join(
-                sample_dir, "sample_raw_per_read_telomere_length.csv")
-            if os.path.exists(os.path.join(
-                sample_dir, "sample_raw_per_read_telomere_length.csv"))
-            else None,
-            "telsubstats": os.path.join(sample_dir, "subtelomere_reads_stats.txt")
-            if os.path.exists(os.path.join(sample_dir, "subtelomere_reads_stats.txt"))
-            else None,
-            "subtellen": os.path.join(sample_dir,
-                                      "sample_raw_per_read_telomere_length.csv"
-                                      )
-            if os.path.exists(os.path.join(sample_dir,
-                                           "sample_raw_per_read_telomere_length.csv"
-                                           ))
-            else None
-        }
-    return sample_files
+def gather_sample_files(sample_details):
+    """Create a dictionary of sample paths to data files in work directory.
 
-
-def gather_sample_files_mapping(sample_details, args):
-    """Create dictionary for sample with paths to data files for mapping."""
-    sample_files = {}
+    If mapping was skipped, mapping related files will be set to None.
+    NB. These will be symlinks, just FYI
+    """
+    expected_files = {
+        "fastcat_stats": "data/{s}/fastcat_stats",
+        "rawcov": "data/{s}/sample_raw_coverage.csv",
+        "rawlen": "data/{s}/sample_raw_per_read_telomere_length.csv",
+        "telsubstats": "data/{s}/data/{s}/subtelomere_reads_stats.txt",
+        "subtellen": "data/{s}/sample_raw_per_read_telomere_length.csv",
+        "endmotif": "data/{s}/summary_telomere_motif.txt",
+        "none": "data/{s}/{s}_results/{s}_NS_per_read_telomere_length.csv",
+        "lenient": "data/{s}/{s}_results/{s}_LS_per_read_telomere_length.csv",
+        "strict": "data/{s}/{s}_results/{s}_HS_per_read_telomere_length.csv",
+        "strictcov": "data/{s}/{s}_results/{s}_HS_chr_arm_coverage.csv",
+        "lenientcov": "data/{s}/{s}_results/{s}_LS_chr_arm_coverage.csv",
+        "output": "data/{s}/{s}_results/{s}_combined_summary.csv",
+        "rawstats": "raw.txt",
+    }
+    sample_files = defaultdict(dict)
     for sample in sample_details:
-        sample_dir = os.path.join(args.data[0], sample["alias"])
-        sample_files[sample["alias"]] = {
-            "fastcat_stats": os.path.join(sample_dir, "fastcat_stats"),
-            "endmotif": os.path.join(sample_dir, "summary_telomere_motif.txt")
-            if os.path.exists(os.path.join(sample_dir, "summary_telomere_motif.txt"))
-            else None,
-            "rawcov": os.path.join(sample_dir, "sample_raw_coverage.csv")
-            if os.path.exists(os.path.join(sample_dir, "sample_raw_coverage.csv"))
-            else None,
-            "rawlen": os.path.join(
-                sample_dir, "sample_raw_per_read_telomere_length.csv")
-            if os.path.exists(os.path.join(
-                sample_dir, "sample_raw_per_read_telomere_length.csv"))
-            else None,
-            "none": os.path.join(sample_dir, "results_NS_per_read_telomere_length.csv")
-            if os.path.exists(os.path.join(
-                sample_dir, "results_NS_per_read_telomere_length.csv"))
-            else None,
-            "lenient": os.path.join(
-                sample_dir, "results_LS_per_read_telomere_length.csv")
-            if os.path.exists(os.path.join(
-                sample_dir, "results_LS_per_read_telomere_length.csv"))
-            else None,
-            "strict": os.path.join(
-                sample_dir, "results_HS_per_read_telomere_length.csv")
-            if os.path.exists(
-                os.path.join(
-                    sample_dir, "results_HS_per_read_telomere_length.csv"))
-            else None,
-            "strictcov": os.path.join(sample_dir, "results_HS_chr_arm_coverage.csv")
-            if os.path.exists(os.path.join(
-                sample_dir, "results_HS_chr_arm_coverage.csv"))
-            else None,
-            "lenientcov": os.path.join(sample_dir, "results_LS_chr_arm_coverage.csv")
-            if os.path.exists(os.path.join(
-                sample_dir, "results_LS_chr_arm_coverage.csv"))
-            else None,
-            "rawstats": os.path.join(sample_dir, "raw.txt")
-            if os.path.exists(os.path.join(sample_dir, "raw.txt"))
-            else None,
-            "telstats": os.path.join(sample_dir, "telomere.txt")
-            if os.path.exists(os.path.join(sample_dir, "telomere.txt"))
-            else None,
-            "telsubstats": os.path.join(sample_dir, "telomere_subtelomere.txt")
-            if os.path.exists(os.path.join(sample_dir, "telomere_subtelomere.txt"))
-            else None,
-            "output": os.path.join(sample_dir, "results_combined_summary.csv")
-            if os.path.exists(os.path.join(sample_dir, "results_combined_summary.csv"))
-            else None,
-            "subtellen": os.path.join(sample_dir, "subtelomere.txt")
-            if os.path.exists(os.path.join(
-                sample_dir, "subtelomere.txt"))
-            else None,
-        }
+        for key, filename in expected_files.items():
+            # If there is no {} returns unadulterated string
+            file_path = Path(filename.format_map({"s": sample["alias"]}))
+            if file_path.exists():
+                sample_files[sample["alias"]][key] = file_path
+            else:
+                sample_files[sample["alias"]][key] = None
     return sample_files
 
 
@@ -134,18 +80,19 @@ def create_boxplot(df, column_name, output_filename, chart_name):
     kde_vals_left = -kde_vals / kde_scale + kde_x_pos
     kde_vals_right = kde_vals[::-1] / kde_scale + kde_x_pos
     kde_vals = np.hstack([kde_vals_left, kde_vals_right])
-    kde_support = np.hstack([
-        np.linspace(series.min(), series.max(), 100),
-        np.linspace(series.max(), series.min(), 100)
-    ])
+    kde_support = np.hstack(
+        [
+            np.linspace(series.min(), series.max(), 100),
+            np.linspace(series.max(), series.min(), 100),
+        ]
+    )
 
-    source = ColumnDataSource(data={'x': kde_vals, 'y': kde_support})
-    p.patch('x', 'y', source=source, alpha=0.3)
+    source = ColumnDataSource(data={"x": kde_vals, "y": kde_support})
+    p.patch("x", "y", source=source, alpha=0.3)
 
     padding_top = 10
     p.y_range = Range1d(
-        start=series.min() - padding_top,
-        end=series.max() + padding_top
+        start=series.min() - padding_top, end=series.max() + padding_top
     )
 
     q1, q3 = series.quantile([0.25, 0.75])
@@ -166,9 +113,9 @@ def create_boxplot(df, column_name, output_filename, chart_name):
 
     p.xaxis.major_label_orientation = "vertical"
     p.xaxis.ticker = []  # Removes the ticks
-    p.xaxis.major_label_text_font_size = '0pt'  # Hide major tick labels
+    p.xaxis.major_label_text_font_size = "0pt"  # Hide major tick labels
     p.xaxis.axis_label = column_name
-    p.yaxis.axis_label = 'Values'
+    p.yaxis.axis_label = "Values"
 
     output_file(output_filename)
     save(p)
@@ -181,12 +128,12 @@ def create_chrboxplot(df, group_column, value_column, output_filename, chart_nam
 
     def sort_key(item):
         # Match chromosome like "chrN" where N is a number (prioritize chromosomes)
-        chr_match = re.search(r'chr(\d+)', item, re.IGNORECASE)
+        chr_match = re.search(r"chr(\d+)", item, re.IGNORECASE)
         if chr_match:
             return (0, int(chr_match.group(1)))  # Chromosomes first, sorted numerically
 
         # Match contigs like "contig_N" (prioritize contigs after chromosomes)
-        contig_match = re.search(r'contig_(\d+)', item, re.IGNORECASE)
+        contig_match = re.search(r"contig_(\d+)", item, re.IGNORECASE)
         if contig_match:
             return (1, int(contig_match.group(1)))  # Contigs come after chromosomes
 
@@ -216,13 +163,15 @@ def create_chrboxplot(df, group_column, value_column, output_filename, chart_nam
         kde_vals_left = -kde_vals / kde_scale + kde_x_pos
         kde_vals_right = kde_vals[::-1] / kde_scale + kde_x_pos
         kde_vals = np.hstack([kde_vals_left, kde_vals_right])
-        kde_support = np.hstack([
-            np.linspace(series.min(), series.max(), 100),
-            np.linspace(series.max(), series.min(), 100)
-        ])
+        kde_support = np.hstack(
+            [
+                np.linspace(series.min(), series.max(), 100),
+                np.linspace(series.max(), series.min(), 100),
+            ]
+        )
 
-        source = ColumnDataSource(data={'x': kde_vals, 'y': kde_support})
-        p.patch('x', 'y', source=source, alpha=0.3)
+        source = ColumnDataSource(data={"x": kde_vals, "y": kde_support})
+        p.patch("x", "y", source=source, alpha=0.3)
 
         q1, q3 = series.quantile([0.25, 0.75])
         iqr = q3 - q1
@@ -256,9 +205,9 @@ def process_text_files(folder_path):
 
     for filename in os.listdir(folder_path):
         if filename.endswith(".txt"):
-            with open(os.path.join(folder_path, filename), 'r') as file:
+            with open(os.path.join(folder_path, filename), "r") as file:
                 content = file.read()
-                file_data.append({'Filename': filename, 'Content': content})
+                file_data.append({"Filename": filename, "Content": content})
 
     if file_data:
         df = pd.DataFrame(file_data)
@@ -271,24 +220,23 @@ def main(args):
     """Run the entry point."""
     logger = get_named_logger("Report")
     report = labs.LabsReport(
-        "wf-teloseq sequencing report", "wf-teloseq",
-        args.params, args.versions, "0.0.3")
+        "wf-teloseq sequencing report",
+        "wf-teloseq",
+        args.params,
+        args.versions,
+        args.workflow_version
+    )
 
     with open(args.metadata) as metadata:
-        sample_details = sorted([
-            {
-                'alias': d['alias'],
-                'type': d['type'],
-                'barcode': d['barcode']
-            } for d in json.load(metadata)
-        ], key=lambda d: d["alias"])
-
-        # Choose sample files based on mapping report flag
-        sample_files = (
-            gather_sample_files_mapping(sample_details, args)
-            if args.mappingreport
-            else gather_sample_files(sample_details, args)
+        sample_details = sorted(
+            [
+                {"alias": d["alias"], "type": d["type"], "barcode": d["barcode"]}
+                for d in json.load(metadata)
+            ],
+            key=lambda d: d["alias"],
         )
+        # Choose sample files based on mapping report flag
+        sample_files = gather_sample_files(sample_details)
 
     with report.add_section("Input summary", "Input summary"):
         tags.p(
@@ -305,7 +253,8 @@ def main(args):
             (sample_id, sample_files[sample_id]["fastcat_stats"])
             for sample_id in sample_files
             if sample_files[sample_id]["fastcat_stats"]
-            and os.path.exists(sample_files[sample_id]["fastcat_stats"])]
+            and os.path.exists(sample_files[sample_id]["fastcat_stats"])
+        ]
 
         if valid_samples:
             sample_ids, stats_dirs = zip(*valid_samples)
@@ -320,22 +269,24 @@ def main(args):
                 df.index.name = "Key"
                 DataTable.from_pandas(df)
 
-    with report.add_section("Read no.", "Read no."):
+    with report.add_section(
+        "Telomere spanning read stats.", "Telomere spanning read stats."
+    ):
         tags.p("""Statistics on reads that have been passed filtering and have been
                 identified as spanning the telomere repeat boundary""")
         tabs = Tabs()
         for d, files in sample_files.items():
             with tabs.add_tab(d):
-                df = load_csv_with_default(
-                    files["telsubstats"], sep="\t"
-                )
+                df = load_csv_with_default(files["telsubstats"], sep="\t")
                 DataTable.from_pandas(df, use_index=False)
 
     # raw and telomere filtered read statistics section
     if not args.mappingreport:
         with report.add_section("Telomere summary", "Telomere summary"):
-            tags.p("Telomere statistics on reads that have telomere and \
-            non-telomere identified (row 3 in Read no. section)")
+            tags.p(
+                "More stats on reads that have telomere and \
+            non-telomere identified"
+            )
             tabs = Tabs()
             for d, files in sample_files.items():
                 with tabs.add_tab(d):
@@ -362,72 +313,88 @@ def main(args):
                     df = load_csv_with_default(files["rawlen"], sep=",", header=0)
                     create_boxplot(
                         df,
-                        'Telomere_length',
+                        "Telomere_length",
                         "unmapped_filters_boxplot.html",
-                        "Unaligned: No Filters")
+                        "Unaligned: No Filters",
+                    )
 
     if args.mappingreport:
         with report.add_section("Telomere summary", "Telomere summary"):
-            tags.p("Telomere statistics on reads that have telomere and \
+            tags.p(
+                "Telomere statistics on reads that have telomere and \
             non-telomere identified (row 3 in Read no. section) before \
-            and after mapped with different filters applied")
+            and after mapped with different filters applied"
+            )
             tags.p("FILTER")
             tags.p("Unaligned = Unaligned telomere reads")
-            tags.p("Mapped: LS filters = Low stringency: keep reads where the \
+            tags.p(
+                "Mapped: LS filters = Low stringency: keep reads where the \
             end mapping position is at least 2000bp (default) beyond last telomere \
             motif or to cut site, which ever comes first. This is \
             to remove short telomere only reads that would not be \
-            chr arm specific and also could be truncated.")
-            tags.p("Mapped: HS filters = High stringency: keep reads where the \
+            chr arm specific and also could be truncated."
+            )
+            tags.p(
+                "Mapped: HS filters = High stringency: keep reads where the \
             start mapping position is before last telomere motif identification \
             and end mapping position is within 25 bp of cutsite (with exception of \
             cutsites beyond 45k). This is to ensure reads span subtelomere \
-            and to limit mismapping and fragmented reads.")
+            and to limit mismapping and fragmented reads."
+            )
             tags.p("REF_TYPE")
-            tags.p("UH = Unknown Haplotype, Mat = Maternal Haplotype, \
-            Pat = Paternal Haplotype")
+            tags.p(
+                "UH = Unknown Haplotype, Mat = Maternal Haplotype, \
+            Pat = Paternal Haplotype"
+            )
             tags.p("TELOMERE_LENGTH CV")
-            tags.p("Coefficient Variation which is how much \
+            tags.p(
+                "Coefficient Variation which is how much \
             variation there is relative to the average value. The \
-            higher the CV, the greater the level of dispersion around the mean.")
+            higher the CV, the greater the level of dispersion around the mean."
+            )
             tabs = Tabs()
             for d, files in sample_files.items():
                 with tabs.add_tab(d):
                     df = load_csv_with_default(files["output"], sep=",", header=0)
                     # Check if the first column header is "Unnamed: 0" and rename
-                    if df.columns[0] == 'Unnamed: 0':
-                        df.rename(columns={'Unnamed: 0': 'Filter'}, inplace=True)
+                    if df.columns[0] == "Unnamed: 0":
+                        df.rename(columns={"Unnamed: 0": "Filter"}, inplace=True)
                     DataTable.from_pandas(df, use_index=False)
 
     if args.mappingreport:
         with report.add_section("Telomere len", "Telomere len"):
-            tags.p("Plotting telomere lengths for raw telomere identified \
-            reads, and post mapping with different filters.")
+            tags.p(
+                "Plotting telomere lengths for raw telomere identified \
+            reads, and post mapping with different filters."
+            )
             # tags.p("No filters = no additional filters")
-            tags.p("Mapped: LS filters = Low stringency: keep reads where the \
+            tags.p(
+                "Mapped: LS filters = Low stringency: keep reads where the \
             end mapping position is at least 2000bp (default) beyond last telomere \
             motif or to cut site, which ever comes first. This is \
             to remove short telomere only reads that would not be \
-            chr arm specific and also could be truncated.")
-            tags.p("Mapped: HS filters = High stringency: keep reads where the \
+            chr arm specific and also could be truncated."
+            )
+            tags.p(
+                "Mapped: HS filters = High stringency: keep reads where the \
             start mapping position is before last telomere motif identification \
             and end mapping position is within 25 bp of cutsite (with exception of \
             cutsites beyond 45k). This is to ensure reads span subtelomere \
-            and to limit mismapping and fragmented reads.")
+            and to limit mismapping and fragmented reads."
+            )
             tags.p("Unaligned = Unaligned telomere reads")
             tabs = Tabs()
 
             for d, files in sample_files.items():
                 with tabs.add_tab(d):
                     with Grid():
-                        df = load_csv_with_default(
-                            files["rawlen"], sep=",", header=0
-                        )
-                        if 'Telomere_length' in df.columns:
+                        df = load_csv_with_default(files["rawlen"], sep=",", header=0)
+                        if "Telomere_length" in df.columns:
                             create_boxplot(
-                                df, 'Telomere_length',
+                                df,
+                                "Telomere_length",
                                 "unmapped_filters_boxplot.html",
-                                "Unmapped: Raw reads"
+                                "Unmapped: Raw reads",
                             )
                             # df1 = load_csv_with_default(
                             #     files["none"], sep=",", header=0)
@@ -436,81 +403,104 @@ def main(args):
                             #     "no_filters_boxplot.html", "Mapped: No Filters"
                             # )
                             df2 = load_csv_with_default(
-                                files["lenient"], sep=",", header=0)
+                                files["lenient"], sep=",", header=0
+                            )
                             create_boxplot(
-                                df2, 'Telomere_length',
+                                df2,
+                                "Telomere_length",
                                 "Low_stringency_filters_boxplot.html",
-                                "Mapped: Low stringency"
+                                "Mapped: Low stringency",
                             )
                             df3 = load_csv_with_default(
-                                files["strict"], sep=",", header=0)
+                                files["strict"], sep=",", header=0
+                            )
                             create_boxplot(
-                                df3, 'Telomere_length',
+                                df3,
+                                "Telomere_length",
                                 "High_stringency_filters_boxplot.html",
-                                "Mapped: High stringency"
+                                "Mapped: High stringency",
                             )
                         else:
                             tags.p("No data available")
                         # Raw plot that always have
-                        df = load_csv_with_default(
-                            files["rawlen"], sep=",", header=0)
+                        df = load_csv_with_default(files["rawlen"], sep=",", header=0)
 
     if args.mappingreport:
         with report.add_section("Telomere chr len", "Telomere chr len"):
-            tags.p("Plotting telomere lengths after mapping to chromosome arms \
-            with different filters.")
-            tags.p("Mapped: LS filters = Low stringency: keep reads where the \
+            tags.p(
+                "Plotting telomere lengths after mapping to chromosome arms \
+            with different filters."
+            )
+            tags.p(
+                "Mapped: LS filters = Low stringency: keep reads where the \
             end mapping position is at least 2000bp (default) beyond last telomere \
             motif or to cut site, which ever comes first. This is \
             to remove short telomere only reads that would not be \
-            chr arm specific and also could be truncated.")
-            tags.p("Mapped: HS filters = High stringency: keep reads where the \
+            chr arm specific and also could be truncated."
+            )
+            tags.p(
+                "Mapped: HS filters = High stringency: keep reads where the \
             start mapping position is before last telomere motif identification \
             and end mapping position is within 25 bp of cutsite (with exception of \
             cutsites beyond 45k). This is to ensure reads span subtelomere \
-            and to limit mismapping and fragmented reads.")
+            and to limit mismapping and fragmented reads."
+            )
             tabs = Tabs()
             for d, files in sample_files.items():
                 with tabs.add_tab(d):
                     tabs2 = Tabs()
-                    with tabs2.add_tab("Telomere length per \
-                                        chromosome (High stringency Filters)"):
+                    with tabs2.add_tab(
+                        "Telomere length per \
+                                        chromosome (High stringency Filters)"
+                    ):
                         df3 = load_csv_with_default(files["strict"], sep=",", header=0)
                         if not df3.empty:
                             create_chrboxplot(
-                                df3, 'Ref', 'Telomere_length',
+                                df3,
+                                "Ref",
+                                "Telomere_length",
                                 "Chromosome_strict_boxplot.html",
-                                "Chromosome: High stringency filters"
+                                "Chromosome: High stringency filters",
                             )
                         else:
                             tags.p("No data available")
-                    with tabs2.add_tab("Telomere length per chromosome \
-                                        (Low stringency Filters)"):
+                    with tabs2.add_tab(
+                        "Telomere length per chromosome \
+                                        (Low stringency Filters)"
+                    ):
                         df3 = load_csv_with_default(files["lenient"], sep=",", header=0)
                         if not df3.empty:
                             create_chrboxplot(
-                                df3, 'Ref', 'Telomere_length',
+                                df3,
+                                "Ref",
+                                "Telomere_length",
                                 "Chromosome_lenient_boxplot.html",
-                                "Chromosome: Lenient Filters"
+                                "Chromosome: Lenient Filters",
                             )
                         else:
                             tags.p("No data available")
 
     if args.mappingreport:
         with report.add_section("Coverage (chr)", "Coverage (chr)"):
-            tags.p("Tables of telomere lengths after mapping to chromosome arms \
+            tags.p(
+                "Tables of telomere lengths after mapping to chromosome arms \
             with different filters. Mapq score filter is applied to each \
-            of these conditions (default 4)")
-            tags.p("Mapped: LS filters = Low stringency: keep reads where the \
+            of these conditions (default 4)"
+            )
+            tags.p(
+                "Mapped: LS filters = Low stringency: keep reads where the \
             end mapping position is at least 2000bp (default) beyond last telomere \
             motif or to cut site, which ever comes first. This is \
             to remove short telomere only reads that would not be \
-            chr arm specific and also could be truncated.")
-            tags.p("Mapped: HS filters = High stringency: keep reads where the \
+            chr arm specific and also could be truncated."
+            )
+            tags.p(
+                "Mapped: HS filters = High stringency: keep reads where the \
             start mapping position is before last telomere motif identification \
             and end mapping position is within 25 bp of cutsite (with exception of \
             cutsites beyond 45k). This is to ensure reads span subtelomere \
-            and to limit mismapping and fragmented reads.")
+            and to limit mismapping and fragmented reads."
+            )
             tabs = Tabs()
 
             for d, files in sample_files.items():
@@ -520,13 +510,15 @@ def main(args):
                         "Telomere chromosome coverage (High stringency Filter)"
                     ):
                         df = load_csv_with_default(
-                            files["strictcov"], sep=",", header=0)
+                            files["strictcov"], sep=",", header=0
+                        )
                         DataTable.from_pandas(df, use_index=False)
                     with tabs2.add_tab(
                         "Telomere chromosome coverage (Low stringency Filter)"
                     ):
                         df = load_csv_with_default(
-                            files["lenientcov"], sep=",", header=0)
+                            files["lenientcov"], sep=",", header=0
+                        )
                         DataTable.from_pandas(df, use_index=False)
 
     report.write(args.report)
@@ -537,25 +529,31 @@ def argparser():
     """Argument parser for entrypoint."""
     parser = wf_parser("report")
     parser.add_argument("report", help="Report output file")
+    parser.add_argument("--metadata", default="metadata.json", help="sample metadata")
     parser.add_argument(
-        "--metadata", default='metadata.json',
-        help="sample metadata")
+        "--versions",
+        required=True,
+        help="directory containing CSVs containing name,version.",
+    )
     parser.add_argument(
-        "--versions", required=True,
-        help="directory containing CSVs containing name,version.")
+        "--params",
+        default=None,
+        required=True,
+        help="A JSON file containing the workflow parameter key/values",
+    )
     parser.add_argument(
-        "--params", default=None, required=True,
-        help="A JSON file containing the workflow parameter key/values")
+        "--revision", default="unknown", help="git branch/tag of the executed workflow"
+    )
     parser.add_argument(
-        "--revision", default='unknown',
-        help="git branch/tag of the executed workflow")
+        "--commit", default="unknown", help="git commit of the executed workflow"
+    )
     parser.add_argument(
-        "--commit", default='unknown',
-        help="git commit of the executed workflow")
+        "--workflow-version", default="unknown",
+        help="The verison of the workflow run to generate this report.",
+    )
     parser.add_argument(
-        "--data", nargs="+", required=True,
-        help="Collected outputs per sample")
-    parser.add_argument(
-        "--mappingreport", action="store_true",
-        help="raw input reads telomere read lengths for boxplot (lenient)")
+        "--mappingreport",
+        action="store_true",
+        help="raw input reads telomere read lengths for boxplot (lenient)",
+    )
     return parser

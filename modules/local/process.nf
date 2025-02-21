@@ -6,6 +6,12 @@ process process_reads {
     label "wf_teloseq"
     cpus 1
     memory '2 GB'
+    publishDir (
+        "${params.out_dir}/${meta.alias}/",
+        mode: "copy",
+        overwrite: true
+    )
+
     input:
         tuple val(meta), path("reads.fastq"), path(stats)
     output:
