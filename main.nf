@@ -4,7 +4,7 @@ nextflow.enable.dsl = 2
 include { fastq_ingress; xam_ingress } from './lib/ingress'
 include { getParams } from './lib/common'
 
-include { mapping } from './modules/local/common'
+include { mapping; collectFilesInDir } from './modules/local/common'
 include { fastq_stats as fastq_stats_all } from './modules/local/common'
 include { fastq_stats as fastq_stats_telo } from './modules/local/common'
 include { fastq_stats as fastq_stats_telo_subtelo } from './modules/local/common'
@@ -64,6 +64,11 @@ process makeReport {
     label "wf_teloseq"
     cpus   1
     memory '2 GB'
+    publishDir (
+        params.out_dir,
+        mode: "move",
+        overwrite: true
+    )
     input:
         val meta_array
         path "versions/*"
@@ -97,47 +102,9 @@ process makeReport {
             --metadata metadata.json \\
             --versions versions \\
             --params params.json \\
-            --data data \\
+            --workflow-version v${workflow.manifest.version} \\
             $extra_arg
         """
-}
-
-// See https://github.com/nextflow-io/nextflow/issues/1636. This is the only way to
-// publish files from a workflow whilst decoupling the publish from the process steps.
-// The process takes a tuple containing the filename and the name of a sub-directory to
-// put the file into. If the latter is `null`, puts it into the top-level directory.
-process publish {
-    // publish inputs to output directory
-    label "wf_teloseq"
-    cpus 1
-    memory '2 GB'
-    publishDir (
-        params.out_dir,
-        mode: "copy",
-        saveAs: { dirname ? "$dirname/$fname" : fname }
-    )
-    input:
-        tuple path(fname), val(dirname)
-    output:
-        path fname
-    script:
-        """
-        echo "Writing output files"
-        """
-}
-
-process collectFilesInDir {
-    label "wf_teloseq"
-    cpus 1
-    memory '2 GB'
-    input:
-        tuple val(meta), path("staging_dir/*"), val(dirname)
-    output:
-        tuple val(meta), path(dirname)
-    script:
-    """
-    mv staging_dir $dirname
-    """
 }
 
 workflow generic_preprocessing {
@@ -238,44 +205,11 @@ workflow pipeline {
                 def ref = file(meta.reference)
                 return tuple(meta, ref)
             }
-
-
         if (params.skip_mapping) {
-            // Collect results into directories to avoid collisions
-            ch_results_for_report = per_sample_stats
-                | map { items ->
-                    def meta = items[0]
-                    def rest = items[1..-1]
-                    [meta, rest, meta.alias]
-                }
-                | collectFilesInDir
-                | map { _meta, dirname -> dirname }
-            // Generate the report
-            mappingreport=false
-            report = makeReport(
-                metadata,  
-                software_versions,
-                workflow_params,
-                ch_results_for_report | collect,
-                mappingreport
-            )
-            combined_results_to_publish = Channel.empty()
-            | mix(
-                software_versions | map { it -> [it, null] },
-                workflow_params | map {it -> [it, null] }
-            )
-            | mix(
-                // Telomere reads
-                valid_samples_with_stats.map { items -> 
-                    def reads = items[1]
-                    def meta = items[0]
-                    [reads, "${meta.alias}/reads"] }
-                .transpose(),
-                // Raw telomere results CSV
-                per_sample_stats.map { meta, _length_summary, lengths_records, _stats_dir, _seqkit_stats -> [lengths_records, "${meta.alias}/results"] }.transpose()
-            )
+            aggregated_results = per_sample_stats
+        }
+        else {
 
-        } else {
             ////////////////////////////////////////////
             // MAPPING ARM PIPELINE
             ////////////////////////////////////////////
@@ -311,9 +245,9 @@ workflow pipeline {
 
             //filter bam with high, low and no stringency but including mapping quality filter applied in previous step
             filtering(coverage_filter2.out.alignment
-            | join (trim_restriction_site_ref.out.cutsites)
-            | join (telo_site_channel),
-            params.telomere_margin,
+                | join (trim_restriction_site_ref.out.cutsites)
+                | join (telo_site_channel),
+                params.telomere_margin,
             )
 
             // Generate final telomere statistics
@@ -323,82 +257,37 @@ workflow pipeline {
                 | join(cov_filter, by: 0)
                 | join(check_reference.out.reference, by: 0)
             )
-
-            // Collect all per-sample results
-            ch_per_sample_results = per_sample_stats
+            // Join the results summaries to the preprocessing stats
+            aggregated_results = per_sample_stats
                 | join(results.out.for_report, by: 0)
-
-            // Collect results into directories to avoid file collisions
-            ch_results_for_report = ch_per_sample_results
-                | map {
-                    def meta = it[0]
-                    def rest = it[1..-1]
-                    def dirname = meta.alias  // Use the alias string for the directory name
-                    [meta, rest, dirname]  // Keep meta object but use alias for dirname
-                }
-                | collectFilesInDir
-                | map { meta, dirname -> dirname }
-
-            // Generate the mapping version of report
-            mappingreport=true
-            report = makeReport(
-                metadata,
-                software_versions,
-                workflow_params,
-                ch_results_for_report | collect,
-                mappingreport
-            )
-
-
-            ////////////////PUBLISH RESULTS SECTION///////////////////////////////
-
-            // Initialize channel for publishing results
-            combined_results_to_publish = Channel.empty()
-                | mix(
-                    software_versions | map { it -> [it, null] },
-                    workflow_params | map {it -> [it, null] }
-                )
-                | mix(
-                    // Telomere reads
-                    valid_samples_with_stats.map { items -> 
-                        def reads = items[1]
-                        def meta = items[0]
-                        [reads, "${meta.alias}/reads"] }
-                    .transpose(),
-                    // Raw telomere results CSV
-                    per_sample_stats.map { meta, _length_summary, lengths_records, _stats_dir, _seqkit_stats -> [lengths_records, "${meta.alias}/results"] }.transpose()
-                )
-
-            if (!params.skip_mapping) {
-
-                combined_results_to_publish = combined_results_to_publish | mix(
-                    // Mapped CSV files
-                    results.out.for_report.map { items -> 
-                        def meta = items[0]
-                        def files = items[1..-1]
-                        [files, "${meta.alias}/results"]
-                    }.transpose(),
-                    // Reference used for mapping
-                    coverage_filter2.out.reference.map { meta, reference -> [[reference], "${meta.alias}/alignment"] }.transpose(),
-                    // Filtered tagged BAM files
-                    filtering.out.finalbam.map { meta, bam, bai -> [[bam, bai], "${meta.alias}/alignment"] }.transpose()
-                )
-            }
         }
+        
+        // Collect files in a working dir, so they can be used in the final report generation 
+        results_for_report = aggregated_results
+            | map { items ->
+                def meta = items[0]
+                def stats_files = items[1..-1]
+                [meta, stats_files, meta.alias]
+            }
+            | collectFilesInDir
+            | map { _meta, dirname -> dirname }
+        // if we did mapping, make the alignment sections of the report
+        boolean make_mapping_report = !params.skip_mapping
 
-
-    emit:
-        report
-        combined_results_to_publish
-        telemetry = workflow_params
-        workflow_params
+        makeReport(
+            metadata,
+            software_versions,
+            workflow_params,
+            results_for_report | collect,
+            make_mapping_report
+        )
 
 }
 
 
 // entrypoint workflow
-WorkflowMain.initialise(workflow, params, log)
 workflow {
+    WorkflowMain.initialise(workflow, params, log)
 
     Pinguscript.ping_start(nextflow, workflow, params)
 
@@ -429,16 +318,6 @@ workflow {
     }
 
     pipeline(samples)
-    // publish results
-    pipeline.out.combined_results_to_publish
-    | toList
-    | flatMap | concat (
-        pipeline.out.report.concat(pipeline.out.workflow_params)
-        | map { it -> [it, null] }
-    )
-    | publish
-
-
 }
 
 workflow.onComplete {
