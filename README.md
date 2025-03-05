@@ -146,7 +146,7 @@ input_reads.fastq   ─── input_directory  ─── input_directory
 | fastq | string | FASTQ files to use in the analysis. | This accepts one of three cases: (i) the path to a single FASTQ file; (ii) the path to a top-level directory containing FASTQ files; (iii) the path to a directory containing one level of sub-directories which in turn contain FASTQ files. In the first and second case, a sample name can be supplied with `--sample`. In the last case, the data is assumed to be multiplexed with the names of the sub-directories as barcodes. In this case, a sample sheet can be provided with `--sample_sheet`. |  |
 | bam | string | BAM or unaligned BAM (uBAM) files to use in the analysis. | This accepts one of three cases: (i) the path to a single BAM file; (ii) the path to a top-level directory containing BAM files; (iii) the path to a directory containing one level of sub-directories which in turn contain BAM files. In the first and second case, a sample name can be supplied with `--sample`. In the last case, the data is assumed to be multiplexed with the names of the sub-directories as barcodes. In this case, a sample sheet can be provided with `--sample_sheet`. |  |
 | analyse_unclassified | boolean | Analyse unclassified reads from input directory. By default the workflow will not process reads in the unclassified directory. | If selected and if the input is a multiplex directory the workflow will also process the unclassified directory. | False |
-| reference | string | Reference genome of the sequenced sample. |  |  |
+| reference | string | Reference genome of the sequenced sample. |  | data/HG002qpMP_reference.fasta.gz |
 
 
 ### Sample Options
@@ -161,7 +161,8 @@ input_reads.fastq   ─── input_directory  ─── input_directory
 
 | Nextflow parameter name  | Type | Description | Help | Default |
 |--------------------------|------|-------------|------|---------|
-| skip_mapping | boolean | Skip mapping step for just sample only telomere length | If selected then the workflow will not run the mapping step but measure telomere length just on the unmapped telomere-subtelomere identified reads. | False |
+| mapping | boolean | Perform alignment to assign haplotypes to telomeric reads. | If selected the workflow will perform alignment to a provided reference or to the default HG002 based reference, allowing statistics to be resolved to the contig or haplotype level.  Apply `--mapping false` if there is no suitable reference available. This will generate statistics for reads with detected telomeric repeats, but will not assign haplotypes. If the reference is kept to only telomeric and subtelomeric regions, alignment should not add significant overhead. | True |
+| alignment_threads | integer | Set max number of threads to use for alignment. |  | 8 |
 
 
 ### Output Options
@@ -175,21 +176,13 @@ input_reads.fastq   ─── input_directory  ─── input_directory
 
 | Nextflow parameter name  | Type | Description | Help | Default |
 |--------------------------|------|-------------|------|---------|
-| mapq | integer | Mapping quality filter parameter | Mapping quality used to filter the BAM file | 4 |
-| min_coverage_percent | integer | Minimum percentage coverage of total telomere reads per chr arm for filtering | Used in minimum coverage calculation for telomere reads using number of chromosome arms | 15 |
-| min_length | integer | Minimum read length for filtering | Used in initial filtering of reads. | 100 |
-| exclude_chr_from_naming | string | Exclusion naming list | Used in chromosome naming to exclude from naming as too similar to others | chr9q chr11p chr13p chr15p chr19p chr6p chr20q chr3q chr6q chr7p chr14p |
-| motif_threshold | integer | Number of motif of repeat to identify chr21p | Chr21p can be identified by the repeat composition rather than blastn | 40 |
-| max_sstart | integer | Max starting location of blastn hit | This ensures blasthits are not part of the reference but spans the beginning | 20 |
-| min_pident | number | Minimum percent identity from the blastn | Used in the de novo naming to filter poor hits | 95 |
-| exp_chr_num | integer | Expected number of chr | Used in minimum coverage calculation for telomere reads with percentage minimum covereage number | 92 |
-| naming_file | string | pangenome used to name de novo contigs |  |  |
-| read_quality | integer | Read quality filter parameter |  | 9 |
+| mapq | integer | Mapping quality filter parameter | Alignments to the reference with a mapping quality (MAPQ) score lower than this value will be discarded from further processing. | 4 |
+| min_length | integer | Minimum read length for filtering | Used in initial filtering of reads. This removes all reads which are either noise, artifacts or partial, and which cannot be full telomeric sequences. Setting this number too high runs the risk of artificially inflating calculated telomere lengths. | 100 |
+| read_quality | integer | Reads with a mean quality score lower than this value will be filtered out prior to analysis. |  | 9 |
 | restriction_site | string | Enzyme cut site | Restriction enzyme cut site used for filtering reads that are not close to this site for the strict setting | GATATC |
 | beyond_cut | integer | Amount of reference to include beyond cut site for each contig |  | 300 |
 | telomere_extension | integer | Addition of telomere to reference avoid mismapping | Reads primary and secondary alignments can be incorrect if one similar reference contig has longer telomere that allows read to match to it better than the other contig | 4000 |
 | telomere_margin | integer | Distance from telomere boundary to use to remove reads whose 3' end do not map up to this chromosome position. |  | 2000 |
-| min_coverage | integer | minimum read number for coverage of reference contig, default is 20% of telomere read average for 92 chr arms | The minimum telomere coverage of chromosome arms to be taken to the final results and plots is calculated as 20% of the average chr arm coverage but can be overridden by giving a value here | -1 |
 
 
 

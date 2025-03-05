@@ -29,9 +29,9 @@ def gather_sample_files(sample_details):
     """
     expected_files = {
         "fastcat_stats": "data/{s}/fastcat_stats",
-        "rawcov": "data/{s}/sample_raw_coverage.csv",
-        "rawlen": "data/{s}/sample_raw_per_read_telomere_length.csv",
-        "telsubstats": "data/{s}/data/{s}/subtelomere_reads_stats.txt",
+        "rawcov": "data/{s}/telomere_length_metrics.csv",
+        "rawlen": "data/{s}/read_telomere_lengths.csv",
+        "telsubstats": "data/{s}/subtelomere_reads_stats.txt",
         "subtellen": "data/{s}/sample_raw_per_read_telomere_length.csv",
         "endmotif": "data/{s}/summary_telomere_motif.txt",
         "none": "data/{s}/{s}_results/{s}_NS_per_read_telomere_length.csv",
@@ -405,21 +405,23 @@ def main(args):
                             df2 = load_csv_with_default(
                                 files["lenient"], sep=",", header=0
                             )
-                            create_boxplot(
-                                df2,
-                                "Telomere_length",
-                                "Low_stringency_filters_boxplot.html",
-                                "Mapped: Low stringency",
-                            )
+                            if not df2.empty:
+                                create_boxplot(
+                                    df2,
+                                    "Telomere_length",
+                                    "Low_stringency_filters_boxplot.html",
+                                    "Mapped: Low stringency",
+                                )
                             df3 = load_csv_with_default(
                                 files["strict"], sep=",", header=0
                             )
-                            create_boxplot(
-                                df3,
-                                "Telomere_length",
-                                "High_stringency_filters_boxplot.html",
-                                "Mapped: High stringency",
-                            )
+                            if not df3.empty:
+                                create_boxplot(
+                                    df3,
+                                    "Telomere_length",
+                                    "High_stringency_filters_boxplot.html",
+                                    "Mapped: High stringency",
+                                )
                         else:
                             tags.p("No data available")
                         # Raw plot that always have

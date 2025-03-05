@@ -1,9 +1,10 @@
 """Tests for the functionaility in workflow-glue process_reads."""
 
-from collections import defaultdict, namedtuple
+from collections import defaultdict
 import os
 from pathlib import Path
 import random
+from unittest.mock import Mock
 
 import pandas as pd
 import pysam
@@ -19,26 +20,22 @@ from workflow_glue.process_reads import (
 )
 
 SCRIPT_DIR = script_dir = Path(__file__).parent
-
-
-# Function to create a mock FastxRecord
-def create_fastx_record(seq, qual, name="test_read"):
-    """Create a mock Pysam FastxRecord."""
-    record = pysam.FastxRecord()
-    record.set_name(name)
-    record.set_sequence(seq, quality=qual)
-    return record
+TEST_BAM = SCRIPT_DIR / "static" / "test_telomere_boundary.bam"
 
 
 @pytest.fixture
-def records():
+def bam_file():
+    """Yield BAM file for tests."""
+    with pysam.AlignmentFile(TEST_BAM, "rb", check_sq=False) as bam:
+        yield bam
+
+
+@pytest.fixture
+def records(bam_file):
     """Open the test bam, yielding a dict of results."""
     records = defaultdict(dict)
-    with pysam.FastxFile(
-        SCRIPT_DIR / "static/test_telomere_boundary.fastq.gz"
-    ) as fastq_file:
-        for record in fastq_file:
-            records[record.name] = record
+    for record in bam_file:
+        records[record.query_name] = record
     return records
 
 
@@ -119,7 +116,7 @@ def test_error_clustering(query_name, records):
     """Test the max error detection - read has at least 20 non overlapping errors in."""
     record = records[query_name]
     boundary, _classification = find_telo_boundary(record, TELOMERE_MOTIF)
-    clust_size = largest_error_cluster(record.sequence, boundary)
+    clust_size = largest_error_cluster(record.query_sequence, boundary)
     assert clust_size >= 20
 
 
@@ -152,9 +149,11 @@ def test_trim_adapters(
     sequence, quality_str, adapters, prefix, max_errors, expected_trim, expected_length
 ):
     """Test that mock reads have the adapter and barcode correctly trimmed."""
-    record = create_fastx_record(seq=sequence, qual=quality_str)
+    record = Mock()
+    record.query_sequence = sequence
+    record.query_qualities = quality_str
     record = trim_adapters(record, adapters, prefix, max_errors)
-    trimmed_seq, trimmed_qual = record.sequence, record.quality
+    trimmed_seq, trimmed_qual = record.query_sequence, record.query_qualities
     if expected_trim:
         assert len(trimmed_seq) == expected_length, (
             f"Unexpected length of trimmed seq {len(trimmed_seq)}"
@@ -239,46 +238,30 @@ def test_process_telomere_stats(
     assert round(summary_df["Telomere length CV"].iloc[0], 2) == round(expected_cv, 2)
 
 
-def test_main_too_short(capsys, tmp_path):
+def test_main(capsys, tmp_path):
     """Test main function.
 
     Input is at least one read which hits every BoundaryFinder variant.
     """
-    # Change into the temporary path, so written out files get blasted into
+    # Change into the temporary path, so written out CSV stats files will
+    # get blasted into
     # oblivion afterwards
     os.chdir(tmp_path)
-    Args = namedtuple(
-        "Args",
-        [
-            "input",
-            "filter_width",
-            "min_repeats",
-            "start_window",
-            "start_repeats",
-            "min_qual_non_telo",
-            "barcode",
-            "skip_trimming",
-            "max_errors",
-            "error_distance",
-        ],
-    )
+    args = Mock()
 
-    args = Args(
-        input=str(
-            (SCRIPT_DIR / "static" / "test_telomere_boundary.fastq.gz").resolve()
-        ),
-        filter_width=10,
-        min_repeats=20,
-        start_window=0.3,
-        start_repeats=0.8,
-        min_qual_non_telo=9,
-        barcode=None,
-        skip_trimming=False,
-        max_errors=5,
-        error_distance=500,
-    )
+    args.input = str((SCRIPT_DIR / "static" / "test_telomere_boundary.bam").resolve())
+    args.output = "/dev/null"
+    args.filter_width = 10
+    args.min_repeats = 20
+    args.start_window = 0.3
+    args.start_repeats = 0.8
+    args.min_qual_non_telo = 9
+    args.barcode = None
+    args.skip_trimming = False
+    args.max_errors = 5
+    args.error_distance = 500
 
     # Run main function
     main(args)
     captured = capsys.readouterr()
-    assert "TooShort: 3, TooFewRepeats: 1, StartNotRepeats: 3, LowQuality: 4, Good: 3, TooErrorful: 2, TooCloseToEnd: 1" in captured.err  # noqa: E501
+    assert "TooShort: 3, TooFewRepeats: 1, LowQuality: 5, StartNotRepeats: 2, Good: 3, TooErrorful: 2, TooCloseToEnd: 1" in captured.err  # noqa: E501

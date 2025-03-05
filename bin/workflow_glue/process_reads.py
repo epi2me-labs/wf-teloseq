@@ -9,6 +9,7 @@ Reads passing all checks are emitted to stdout.
 from collections import Counter
 import csv
 import enum
+from pathlib import Path
 import re
 import sys
 
@@ -17,6 +18,7 @@ import numpy as np
 import pandas as pd
 import pysam
 from scipy import ndimage
+from workflow_glue.ts_utils import calculate_cv, calculate_n50
 
 from .util import wf_parser  # noqa: ABS101
 
@@ -67,25 +69,45 @@ BARCODES = [
 # the most common
 BARCODES = [bc + "CCTAACC" for bc in BARCODES]
 
+# I am likely to try and break this, so check that the tag is valid SAM format
+# lower case is not reserved by SAM
+SAM_TAG_REGEX = re.compile(r"^[a-zA-Z]{2}:[AifZHB]:.+$")
+
 
 class BoundaryFinder(enum.Enum):
     """Enumeration of possible boundary finder states."""
 
-    Good = 0
+    Good = "Good"
     # The read was too short for analysis
-    TooShort = 1
+    TooShort = "TooShort"
     # Too few telomere repeats in the whole read
-    TooFewRepeats = 2
+    TooFewRepeats = "TooFewRepeats"
     # Unable to determine the boundary for whatever reason
-    FailedAnalysis = 3
+    FailedAnalysis = "FailedAnalysis"
     # Read start (where repeats should be) did not have enough repeats
-    StartNotRepeats = 4
+    StartNotRepeats = "StartNotRepeats"
     # The telomere boundary is too close to the end of the read, likely false positive
-    TooCloseToEnd = 5
+    TooCloseToEnd = "TooCloseEnd"
     # Too many error kmers clustered together
-    TooErrorful = 6
+    TooErrorful = "TooErrorful"
     # Basecalls after boundary have low Q score
-    LowQuality = 7
+    LowQuality = "LowSubTeloQual"
+
+
+def dump_to_csv(filename, data, header=None):
+    """Dump elements in the provided list to a csv.
+
+    Parameters
+    ----------
+    :param filename: Filename to write to.
+    :param data: list of sequences to be written. Each sequence must be equal length
+    :param header: Header of the csv. If None, no header is written
+    """
+    with open(filename, mode="w", newline="") as file:
+        writer = csv.writer(file)
+        if header:
+            writer.writerow(header)
+        writer.writerows(data)
 
 
 def find_telo_boundary(
@@ -106,9 +128,9 @@ def find_telo_boundary(
     :rtype: tuple[int | None, BoundaryFinder]
     """
     # find motif
-    motifs = np.zeros(len(record.sequence), dtype=int)
+    motifs = np.zeros(len(record.query_sequence), dtype=int)
     matches = 0
-    for match in re.finditer(motif, record.sequence):
+    for match in re.finditer(motif, record.query_sequence):
         matches += 1
         motifs[match.start(): match.end()] = 1
 
@@ -119,7 +141,7 @@ def find_telo_boundary(
     # common error is to have few repeats at the start of the read
     # require the start of read to be composed of repeats
     # TODO: evaluate this heuristic more
-    start = int(len(record.sequence) * start_window)
+    start = int(len(record.query_sequence) * start_window)
     if np.sum(motifs[:start]) < start_repeats * start:
         return None, BoundaryFinder.StartNotRepeats
 
@@ -145,15 +167,15 @@ def find_telo_boundary(
         return None, BoundaryFinder.CannotAnalyse
 
     # a boundary within the filter width is more likely a false positive
-    if len(record.sequence) - boundary < width:
+    if len(record.query_sequence) - boundary < width:
         return None, BoundaryFinder.TooCloseToEnd
 
-    # if theres a low quality region ofter the telomere region,
+    # if theres a low quality region after the telomere region,
     # thats likely the basecaller when down the wrong track
     # and we've misidentified the boundary
-    quals = record.get_quality_array()[boundary:]
-    if np.median(quals) < min_qual_non_telo:
-        return None, BoundaryFinder.LowQuality
+    if quals := record.query_qualities:  # as we process references too
+        if np.median(quals[boundary:]) < min_qual_non_telo:
+            return None, BoundaryFinder.LowQuality
 
     return boundary, BoundaryFinder.Good
 
@@ -188,7 +210,7 @@ def trim_adapters(record, adapters, prefix=200, max_errors=3):
 
     Doesn't trim if there is no barcode match.
     """
-    seq_ = record.sequence[:prefix]
+    seq_ = record.query_sequence[:prefix]
     trim = None
     for _ibc, bc in enumerate(adapters, start=1):
         hits = edlib.align(bc, seq_, mode="HW", task="path")
@@ -196,54 +218,10 @@ def trim_adapters(record, adapters, prefix=200, max_errors=3):
             trim = hits["locations"][0][1] + 1
             break  # exceedingly unlikely to have multiple hits
     if trim is not None:
-        record.set_sequence(record.sequence[trim:], quality=record.quality[trim:])
+        trimmed_quals = record.query_qualities[trim:]
+        record.query_sequence = record.query_sequence[trim:]
+        record.query_qualities = trimmed_quals
     return record
-
-
-def calculate_n50(series):
-    """Calculate N50 for a pandas series using np.searchsorted."""
-    if not pd.api.types.is_numeric_dtype(series):
-        raise ValueError("Input series is non numeric")
-    sorted_lengths = series.sort_values(ascending=False).values
-    cumulative_sum = np.cumsum(sorted_lengths)
-    half_sum = cumulative_sum[-1] / 2
-    index = np.searchsorted(cumulative_sum, half_sum)
-    return sorted_lengths[index]
-
-
-def calculate_cv(series, ddof=1):
-    """
-    Calculate the coefficient of variance for a pandas series.
-
-    Uses the std deviation with 1 as the degrees of freedom,
-    as this is likely to be sample of a larger population.
-
-    Parameters
-    ----------
-    :param ddof: Degrees of freedom for calculating stddev.
-
-    """
-    if not pd.api.types.is_numeric_dtype(series):
-        raise ValueError("Input series is non numeric")
-    series_mean = np.mean(series)
-    series_std = np.std(series, ddof=ddof)
-    return np.nan_to_num(series_std / series_mean)
-
-
-def dump_to_csv(filename, data, header=None):
-    """Dump elements in the provided list to a csv.
-
-    Parameters
-    ----------
-    :param filename: Filename to write to.
-    :param data: list of sequences to be written. Each sequence must be equal length
-    :param header: Header of the csv. If None, no header is written
-    """
-    with open(filename, mode="w", newline="") as file:
-        writer = csv.writer(file)
-        if header:
-            writer.writerow(header)
-        writer.writerows(data)
 
 
 def process_telomere_stats(telomere_lengths):
@@ -285,7 +263,7 @@ def process_telomere_stats(telomere_lengths):
     # so it's run separately
     # See https://stackoverflow.com/questions/68091853/python-cannot-perform-both-aggregation-and-transformation-operations-simultaneo  # noqa: E501
     summary_stats["Telomere length CV"] = calculate_cv(
-        telomere_length_df["Telomere_length"]
+        telomere_length_df["Telomere_length"].values
     )
     summary_df = summary_stats.to_frame().T
     # Round to human friendly DP
@@ -312,14 +290,27 @@ def main(args):
     # Track a count of how we do on these reads
     boundary_result_count = Counter()
     boundaries = []
-    with pysam.FastxFile(args.input) as fastq_in:
-        for i, record in enumerate(fastq_in):
-            if i % 25000 == 0:
+    with (
+        pysam.AlignmentFile(args.input, mode="r", check_sq=False) as bam_in,
+        pysam.AlignmentFile(args.output, mode="w", template=bam_in) as bam_out
+    ):
+        for i, record in enumerate(bam_in):
+            if i and i % 25000 == 0:
                 sys.stderr.write(f"Processed {i} reads\n")
 
+            # As we are writing everything out now - we need to trim
+            # adapters for all reads
+            if not args.skip_trimming:
+                record = trim_adapters(record, barcodes)
+
+            # Immediately tag the record with -1 for boundary coordinate
+            # Only updated later if a boundary is detected
+            record.set_tag("tl", -1, value_type="i")
             # maybe some other preflight checks
-            if len(record.sequence) < 2 * args.filter_width * len(TELOMERE_MOTIF):
+            if len(record.query_sequence) < 2 * args.filter_width * len(TELOMERE_MOTIF):
                 boundary_result_count[BoundaryFinder.TooShort] += 1
+                record.set_tag("qc", BoundaryFinder.TooShort.value, value_type="Z")
+                bam_out.write(record)
                 continue
 
             # find telomere boundary
@@ -333,37 +324,40 @@ def main(args):
                 min_qual_non_telo=args.min_qual_non_telo,
             )
 
+            if boundary is not None:
+                record.set_tag("tl", boundary, value_type="i")
+
             if classification != BoundaryFinder.Good:
                 boundary_result_count[classification] += 1
+                record.set_tag("qc", classification.value, value_type="Z")
+                bam_out.write(record)
                 continue
 
             # remove reads with pathological errors
             # this test is expensive, do it last
             largest_cluster = largest_error_cluster(
-                record.sequence, boundary, distance=args.error_distance
+                record.query_sequence, boundary, distance=args.error_distance
             )
             if largest_cluster > args.max_errors:
                 boundary_result_count[BoundaryFinder.TooErrorful] += 1
+                record.set_tag("qc", BoundaryFinder.TooErrorful.value, value_type="Z")
+                bam_out.write(record)
                 continue
 
-            # trim adapters + barcodes
-            if not args.skip_trimming:
-                record = trim_adapters(
-                    record, barcodes
-                )
             # we have a good read
-            boundary_result_count[BoundaryFinder.Good] += 1
-            sys.stdout.write(f"{str(record)}\n")
-            boundaries.append((record.name, boundary))
-    summary_df = process_telomere_stats(
-        boundaries
-    )
+            boundary_result_count[classification] += 1
+            record.set_tag("qc", classification.value, value_type="Z")
+            # Add the telomere boundary location to the comment
+            bam_out.write(record)
+            boundaries.append((record.query_name, boundary))
+
+    summary_df = process_telomere_stats(boundaries)
     if summary_df is not None:
-        summary_df.to_csv("sample_raw_coverage.csv", index=False)
+        summary_df.to_csv("telomere_length_metrics.csv", index=False)
     if boundaries:
         # Wrire telomeric sequence lengths to CSV
         dump_to_csv(
-            "sample_raw_per_read_telomere_length.csv",
+            "read_telomere_lengths.csv",
             boundaries,
             ("Read ID", "Telomere_length"),
         )
@@ -376,9 +370,12 @@ def main(args):
 def argparser():
     """Argument parser for entry point."""
     parser = wf_parser("ProReads")
-    parser.add_argument("--input", help="Input FASTQ/FASTA file")
     parser.add_argument(
-        "--output", default=sys.stdout, type=str, help="Output BAM file"
+        "--input", default=sys.stdin.buffer,
+        help="Input BAM file"
+    )
+    parser.add_argument(
+        "--output", default=sys.stdout, type=Path, help="Output BAM file"
     )
     # Motif and read filtering options
     grp = parser.add_argument_group(

@@ -1,20 +1,3 @@
-process mapping {
-    label "wf_teloseq"
-    cpus 6
-    memory "2.GB"
-
-    input:
-        tuple val(meta), path("reads.fastq"), path("reference.fasta")
-
-    output:
-        tuple val(meta), path("telomere.q${params.mapq}.bam"), path("telomere.q${params.mapq}.bam.bai"), emit: alignment
-        tuple val(meta), path("reference.fasta"), emit: mappingref
-
-    script:
-        """
-        minimap2 -ax map-ont -t ${task.cpus} reference.fasta reads.fastq | samtools view -bhq ${params.mapq} - | samtools sort -o telomere.q${params.mapq}.bam && samtools index telomere.q${params.mapq}.bam
-        """
-}
 process fastq_stats {
     label "wf_teloseq"
     cpus 1
