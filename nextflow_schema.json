@@ -38,6 +38,7 @@
                 "reference": {
                     "type": "string",
                     "format": "file-path",
+                    "default": "data/HG002qpMP_reference.fasta.gz",
                     "pattern": "^\\S+\\.(fasta|fa|fna|faa)(\\.gz)?$",
                     "description": "Reference genome of the sequenced sample."
                 }
@@ -79,12 +80,22 @@
             "fa_icon": "fas fa-arrow-left",
             "description": "Parameters modifying TeloSeq pipeline behaviour",
             "properties": {
-                "skip_mapping": {
+                "mapping": {
                     "type": "boolean",
-                    "default": false,
-                    "description": "Skip mapping step for just sample only telomere length",
-                    "help_text": "If selected then the workflow will not run the mapping step but measure telomere length just on the unmapped telomere-subtelomere identified reads."
+                    "default": true,
+                    "description": "Perform alignment to assign haplotypes to telomeric reads.",
+                    "help_text": "If selected the workflow will perform alignment to a provided reference or to the default HG002 based reference, allowing statistics to be resolved to the contig or haplotype level.  Apply `--mapping false` if there is no suitable reference available. This will generate statistics for reads with detected telomeric repeats, but will not assign haplotypes. If the reference is kept to only telomeric and subtelomeric regions, alignment should not add significant overhead."
+                },
+                "alignment_threads": {
+                    "type": "integer",
+                    "default": 8,
+                    "description": "Set max number of threads to use for alignment."
                 }
+            },
+            "dependencies": {
+                "mapping": [
+                    "reference"
+                ]
             }
         },
         "output": {
@@ -112,59 +123,18 @@
                     "type": "integer",
                     "default": 4,
                     "description": "Mapping quality filter parameter",
-                    "help_text": "Mapping quality used to filter the BAM file"
-                },
-                "min_coverage_percent": {
-                    "type": "integer",
-                    "default": 15,
-                    "description": "Minimum percentage coverage of total telomere reads per chr arm for filtering",
-                    "help_text": "Used in minimum coverage calculation for telomere reads using number of chromosome arms"
+                    "help_text": "Alignments to the reference with a mapping quality (MAPQ) score lower than this value will be discarded from further processing."
                 },
                 "min_length": {
                     "type": "integer",
                     "default": 100,
                     "description": "Minimum read length for filtering",
-                    "help_text": "Used in initial filtering of reads."
-                },
-                "exclude_chr_from_naming": {
-                    "type": "string",
-                    "default": "chr9q chr11p chr13p chr15p chr19p chr6p chr20q chr3q chr6q chr7p chr14p",
-                    "description": "Exclusion naming list",
-                    "help_text": "Used in chromosome naming to exclude from naming as too similar to others"
-                },
-                "motif_threshold": {
-                    "type": "integer",
-                    "default": 40,
-                    "description": "Number of motif of repeat to identify chr21p",
-                    "help_text": "Chr21p can be identified by the repeat composition rather than blastn"
-                },
-                "max_sstart": {
-                    "type": "integer",
-                    "default": 20,
-                    "description": "Max starting location of blastn hit",
-                    "help_text": "This ensures blasthits are not part of the reference but spans the beginning"
-                },
-                "min_pident": {
-                    "type": "number",
-                    "default": 95,
-                    "description": "Minimum percent identity from the blastn",
-                    "help_text": "Used in the de novo naming to filter poor hits"
-                },
-                "exp_chr_num": {
-                    "type": "integer",
-                    "default": 92,
-                    "description": "Expected number of chr",
-                    "help_text": "Used in minimum coverage calculation for telomere reads with percentage minimum covereage number"
-                },
-                "naming_file": {
-                    "type": "string",
-                    "format": "file-path",
-                    "description": "pangenome used to name de novo contigs"
+                    "help_text": "Used in initial filtering of reads. This removes all reads which are either noise, artifacts or partial, and which cannot be full telomeric sequences. Setting this number too high runs the risk of artificially inflating calculated telomere lengths."
                 },
                 "read_quality": {
                     "type": "integer",
                     "default": 9,
-                    "description": "Read quality filter parameter"
+                    "description": "Reads with a mean quality score lower than this value will be filtered out prior to analysis."
                 },
                 "restriction_site": {
                     "type": "string",
@@ -187,12 +157,6 @@
                     "type": "integer",
                     "default": 2000,
                     "description": "Distance from telomere boundary to use to remove reads whose 3' end do not map up to this chromosome position."
-                },
-                "min_coverage": {
-                    "type": "integer",
-                    "default": -1,
-                    "description": "minimum read number for coverage of reference contig, default is 20% of telomere read average for 92 chr arms",
-                    "help_text": "The minimum telomere coverage of chromosome arms to be taken to the final results and plots is calculated as 20% of the average chr arm coverage but can be overridden by giving a value here"
                 }
             }
         },

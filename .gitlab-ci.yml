@@ -4,7 +4,7 @@ include:
     file: "wf-containers.yaml"
 
 variables:
-  NF_WORKFLOW_OPTS: "--fastq test_data/HG002_small_test.fastq.gz"
+  NF_WORKFLOW_OPTS: "--fastq test_data/HG002_small_test.fastq.gz --alignment_threads 2"
   RELEASE_WORKFLOW: "no"
   CI_FLAVOUR: "new"
 
@@ -21,7 +21,7 @@ docker-run:
       - MATRIX_NAME: [
           "defaults",
           "bam_in",
-          "skip_mapping",
+          "no_mapping",
           "non_telomeric_reads",
           "missing_reference",
           "sample_sheet_same",
@@ -40,38 +40,34 @@ docker-run:
         NF_IGNORE_PROCESSES: coverage_calc
     - if: $MATRIX_NAME == "bam_in"
       variables:
-        NF_WORKFLOW_OPTS: "--bam test_data/samples/"
+        NF_WORKFLOW_OPTS: "--bam test_data/samples/ --alignment_threads 2"
         NF_IGNORE_PROCESSES: coverage_calc
     - if: $MATRIX_NAME == "skip_mapping"
       variables:
-        NF_WORKFLOW_OPTS: "--fastq test_data/HG002_small_test.fastq.gz --skip_mapping"
+        NF_WORKFLOW_OPTS: "--fastq test_data/HG002_small_test.fastq.gz --mapping false --alignment_threads 2"
         NF_IGNORE_PROCESSES: coverage_calc
     - if: $MATRIX_NAME == "non_telomeric_reads"
       variables:
-        NF_WORKFLOW_OPTS: "--bam test_data/non_telomeric_1000.bam --skip_mapping"
+        NF_WORKFLOW_OPTS: "--bam test_data/non_telomeric_1000.bam"
         NF_IGNORE_PROCESSES: coverage_calc
         ASSERT_NEXTFLOW_FAILURE: "yes"
         ASSERT_NEXTFLOW_FAILURE_REXP: "No valid samples found. Exiting workflow."
-    - if: $MATRIX_NAME == "non_telomeric_reads"
-      variables:
-        NF_WORKFLOW_OPTS: "--bam test_data/non_telomeric_1000.bam --reference data/HG002qpMP_reference.fasta.gz"
-        NF_IGNORE_PROCESSES: coverage_calc
     - if: $MATRIX_NAME == "missing_reference"
       variables:
-        NF_WORKFLOW_OPTS: "--fastq test_data/HG002_small_test.fastq.gz --reference im_not_here.fasta.gz"
+        NF_WORKFLOW_OPTS: "--fastq test_data/HG002_small_test.fastq.gz --reference im_not_here.fasta.gz --alignment_threads 2"
         ASSERT_NEXTFLOW_FAILURE: "yes"
     - if: $MATRIX_NAME == "sample_sheet_same"
       variables:
-        NF_WORKFLOW_OPTS: "--bam test_data/samples --sample_sheet test_data/sample_sheet_same_ref.csv"
+        NF_WORKFLOW_OPTS: "--bam test_data/samples --sample_sheet test_data/sample_sheet_same_ref.csv --alignment_threads 2"
         NF_IGNORE_PROCESSES: coverage_calc
     - if: $MATRIX_NAME == "sample_sheet_diff"
       variables:
-        NF_WORKFLOW_OPTS: "--bam test_data/samples --sample_sheet test_data/sample_sheet_different_ref.csv"
+        NF_WORKFLOW_OPTS: "--bam test_data/samples --sample_sheet test_data/sample_sheet_different_ref.csv --alignment_threads 2"
         NF_IGNORE_PROCESSES: coverage_calc
     # Check the mapq quality filter does something
     - if: $MATRIX_NAME == "map61"
       variables:
-        NF_WORKFLOW_OPTS: "--fastq test_data/HG002_small_test.fastq.gz --reference data/HG002qpMP_reference.fasta.gz --mapq 61"
+        NF_WORKFLOW_OPTS: "--fastq test_data/HG002_small_test.fastq.gz --reference data/HG002qpMP_reference.fasta.gz --mapq 61 --alignment_threads 2"
         ASSERT_NEXTFLOW_FAILURE: "yes"
         ASSERT_NEXTFLOW_FAILURE_REXP : "Error executing process > 'pipeline:filtering (1)"
    

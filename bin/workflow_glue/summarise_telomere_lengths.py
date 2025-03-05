@@ -8,12 +8,11 @@ It can operate in two modes:
 Use the '--mode' command-line argument to select the mode.
 """
 
-import re
-
-import numpy as np
 import pandas as pd
 
-from .util import wf_parser  # noqa: ABS101
+from .util import wf_parser, get_named_logger  # noqa: ABS101
+
+logger = get_named_logger(__name__)
 
 
 def parse_seqkit(fname):
@@ -35,30 +34,6 @@ def parse_seqkit(fname):
         .drop(columns=["IsSec", "IsSup", "Strand"])
     )
     return df
-
-
-def sort_key(ref):
-    """Sort chr names."""
-    # Extract the chromosome part before the first underscore
-    chr_part = ref.split('_')[0]
-    chr_match = re.match(r'^chr(\d+|X|Y|M)(p|q)?(_[a-zA-Z])?$', chr_part, re.IGNORECASE)
-    if chr_match:
-        chr_num = chr_match.group(1).upper()
-        if chr_num.isdigit():
-            return (0, int(chr_num))
-        elif chr_num == 'X':
-            return (0, 23)
-        elif chr_num == 'Y':
-            return (0, 24)
-        elif chr_num == 'M':
-            return (0, 25)
-
-    contig_match = re.match(r'^contig_(\d+)$', ref, re.IGNORECASE)
-    if contig_match:
-        contig_num = int(contig_match.group(1))
-        return (1, contig_num)
-
-    return (2, ref)
 
 
 def process_alignment_mode(args):
@@ -145,7 +120,7 @@ def process_alignment_mode(args):
             continue
 
         # First, generate global summary across UH references
-        global_summary = generate_summary(filtered_df, tag, 'UH')
+        global_summary = None
 
         # For the aligned data only, generate per-reference statistics
         if 'Alignment_Status' in filtered_df.columns:
@@ -179,17 +154,9 @@ def process_alignment_mode(args):
             coverage_filter = per_ref_summary['Coverage'] >= args.min_coverage
             per_ref_summary = per_ref_summary[coverage_filter]
 
-        # May not need this option anymore as just sort using function
-        # Read ref `.fai` index to get order of reference sequences
-        # refs = list(
-        #     pd.read_csv(
-        #         args.ref_fai, sep="\t", usecols=[0], header=None
-        #     ).squeeze()
-        # )
-
         # Re-order summary to chr order
         per_ref_summary = per_ref_summary.copy()
-        per_ref_summary['sort_order'] = per_ref_summary['Ref'].apply(sort_key)
+        # per_ref_summary['sort_order'] = per_ref_summary['Ref'].apply(sort_key)
         per_ref_summary = per_ref_summary.sort_values(['sort_order', 'Ref']).drop(
             'sort_order', axis=1
         )
@@ -223,8 +190,8 @@ def process_alignment_mode(args):
                 continue
 
             # Generate summary for this specific ref type
-            type_summary = generate_summary(ref_type_df, tag, ref_type)
-            type_summaries.append(type_summary)
+            # type_summary = generate_summary(ref_type_df, tag, ref_type)
+            # type_summaries.append(type_summary)
 
         # Combine ref type summaries and save
         if type_summaries:
@@ -249,110 +216,14 @@ def process_alignment_mode(args):
         )
 
 
-def generate_summary(df, tag, ref_type):
-    """Generate summary statistics for a given DataFrame."""
-    # Calculate statistics
-    telomere_mean = round(df["Telomere_length"].mean(), 0)
-    telomere_std = round(df["Telomere_length"].std(), 0)
-    telomere_cv = (telomere_std / telomere_mean) if telomere_mean != 0 else 0
-    telomere_max = int(df["Telomere_length"].max())
-
-    # Calculate N50 for telomere length
-    sorted_lengths = df["Telomere_length"].sort_values(ascending=False).values
-    cumulative_sum = np.cumsum(sorted_lengths)
-    half_sum = cumulative_sum[-1] / 2
-    index = np.searchsorted(cumulative_sum, half_sum)
-    telomere_n50 = sorted_lengths[index]
-
-    # Create summary DataFrame
-    summary = pd.DataFrame(
-        {
-            "Filter": [tag],
-            "Ref_Type": [ref_type],
-            "Read count": df.shape[0],
-            "Telomere length mean": round(telomere_mean, 0),
-            "Telomere length SD": round(telomere_std, 0),
-            "Telomere length max": round(telomere_max, 0),
-            "Telomere length N50": [telomere_n50],
-            "Telomere length CV": [round(telomere_cv, 2)],
-            "Acc mean": round(df["Acc"].mean(), 2) if "Acc" in df.columns else np.nan,
-            "Acc SD": round(df["Acc"].std(), 2) if "Acc" in df.columns else np.nan,
-        },
-        index=[0],
-    )
-
-    return summary
-
-
-def process_raw_mode(args):
-    """Process data in raw mode."""
-    # Load the datasets
-    df = pd.read_csv(
-        args.telomere_lengths,
-        sep="\t",
-        header=None,
-        names=["Read", "Telomere_length", "Tags"]
-    )
-
-    # Define aggregation functions
-    agg_functions = {"Telomere_length": ["mean", "std", "max"]}
-
-    # Aggregate statistics
-    summary_stats = df.agg(agg_functions).round(0)
-    summary_stats["Read_count"] = len(df)
-    read_count = len(df)
-
-    # Calculate coefficient of variation (CV)
-    telomere_mean = round(summary_stats["Telomere_length"]["mean"], 0)
-    telomere_std = round(summary_stats["Telomere_length"]["std"], 0)
-    telomere_cv = (telomere_std / telomere_mean) if telomere_mean != 0 else 0
-    telomere_max = summary_stats["Telomere_length"]["max"]
-
-    # Calculate N50 for telomere length using np.searchsorted
-    sorted_lengths = df["Telomere_length"].sort_values(ascending=False).values
-    cumulative_sum = np.cumsum(sorted_lengths)
-    half_sum = cumulative_sum[-1] / 2
-    index = np.searchsorted(cumulative_sum, half_sum)
-    telomere_n50 = sorted_lengths[index]
-
-    # Create a new summary DataFrame with the desired format
-    summary_formatted = pd.DataFrame(
-        {
-            "Read count": [read_count],
-            "Telomere length mean": telomere_mean,
-            "Telomere length SD": telomere_std,
-            "Telomere length max": [int(telomere_max)],
-            "Telomere length N50": [telomere_n50],
-            "Telomere length CV": [round(telomere_cv, 2)],
-        }
-    )
-
-    # Save the formatted summary DataFrame to a CSV
-    summary_formatted.to_csv(f"{args.output_prefix}_raw_coverage.csv", index=False)
-
-    # Save per-Read information including telomere length and tags
-    df.to_csv(f"{args.output_prefix}_raw_per_read_telomere_length.csv", index=False)
-
-
 def main(args):
     """Run the entry point."""
-    if args.mode == "alignment":
-        process_alignment_mode(args)
-    elif args.mode == "raw":
-        process_raw_mode(args)
-    else:
-        raise ValueError(f"Unknown mode: {args.mode}")
+    process_alignment_mode(args)
 
 
 def argparser():
     """Argument parser for entrypoint."""
     parser = wf_parser("TeloLen")
-    parser.add_argument(
-        "--mode",
-        choices=["alignment", "raw"],
-        required=True,
-        help="Mode of processing: 'alignment' or 'raw'",
-    )
     parser.add_argument(
         "--telomere_lengths",
         required=True,
@@ -371,10 +242,6 @@ def argparser():
     parser.add_argument(
         "--seqkit_bam",
         help="Seqkit BAM output TSV file (required for 'alignment' mode)",
-    )
-    parser.add_argument(
-        "--ref_fai",
-        help="Reference FASTA .fai index file (required for 'alignment' mode)",
     )
     parser.add_argument(
         "--min_coverage",

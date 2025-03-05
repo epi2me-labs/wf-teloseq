@@ -4,12 +4,10 @@ nextflow.enable.dsl = 2
 include { fastq_ingress; xam_ingress } from './lib/ingress'
 include { getParams } from './lib/common'
 
-include { mapping; collectFilesInDir } from './modules/local/common'
-include { fastq_stats as fastq_stats_all } from './modules/local/common'
-include { fastq_stats as fastq_stats_telo } from './modules/local/common'
-include { fastq_stats as fastq_stats_telo_subtelo } from './modules/local/common'
+include { align_and_process } from './modules/local/alignment'
+include { fastq_stats; collectFilesInDir } from './modules/local/common'
 include { process_reads } from './modules/local/process'
-include { check_reference; trim_restriction_site; trim_restriction_site_ref; coverage_filter2; nm_filter; telomere_sites; filtering; results } from './modules/local/to_review'
+include { results } from './modules/local/to_review'
 
 process getVersions {
     label "wf_teloseq"
@@ -32,32 +30,6 @@ process getVersions {
     ( seqtk 2>&1 || true ) | grep "Version" | awk '{print "seqtk," \$2}' >> versions.txt
     """
 }
-
-// Very unsure about this fixed 5
-process coverage_calc {
-    label "wf_teloseq"
-    cpus 1
-    memory '2 GB'
-    input:
-        tuple val(meta), path("telomere.fastq")
-    output:
-        tuple val(meta), stdout, emit: cov
-    script:
-    """
-    if [[ "${params.min_coverage}" != -1 ]]; then
-        coverage=${params.min_coverage}
-    else
-        read_count=\$(wc -l < telomere.fastq | awk '{print \$1}')
-        coverage=\$(( read_count / 4 / ${params.exp_chr_num} * ${params.min_coverage_percent} / 100 ))
-        if (( coverage < 5 )); then
-            coverage=5
-        fi
-    fi
-    echo -n \$coverage
-    """
-}
-
-
 
 // Make report html file using staged file dir and other files
 process makeReport {
@@ -154,18 +126,14 @@ workflow prealignment_stats {
     take:
     valid_samples_with_stats
     main:
-        // Calculate the expected coverage
-        // Calculate the expected coverage of telomere reads per chr arm at 15% of average but can be overridden by min_coverage
         meta_and_reads = valid_samples_with_stats.map{items -> {
             def meta = items[0]
             def reads = items[1]
             [meta, reads]
-        }}
-        cov_filter = coverage_calc(meta_and_reads)
-        
+        }}        
         // Statistics gathering
         // Read seqkit stats on trimmed telomere and subtelomere containing reads  
-        subtelomere_stats = fastq_stats_telo_subtelo(meta_and_reads, "subtelomere_reads_stats.txt", "Telomere_subtelomere_Reads")
+        subtelomere_stats = fastq_stats(meta_and_reads, "subtelomere_reads_stats.txt", "Telomere_subtelomere_Reads")
         
         // Prepare final results channel, to be added to later depending upon path, removing read file path
         per_sample_stats = valid_samples_with_stats
@@ -175,8 +143,6 @@ workflow prealignment_stats {
 
     emit:
         per_sample_stats
-        // Couldn't the join above allow us to access this file anyway?
-        cov_filter
     
 }
 
@@ -196,7 +162,6 @@ workflow pipeline {
 
         pre_stats = prealignment_stats(valid_samples_with_stats)
         per_sample_stats = pre_stats.per_sample_stats
-        cov_filter = pre_stats.cov_filter
 
         // Link sample to a reference
         reference_channel = valid_samples_with_stats
@@ -205,61 +170,26 @@ workflow pipeline {
                 def ref = file(meta.reference)
                 return tuple(meta, ref)
             }
-        if (params.skip_mapping) {
-            aggregated_results = per_sample_stats
-        }
-        else {
 
-            ////////////////////////////////////////////
-            // MAPPING ARM PIPELINE
-            ////////////////////////////////////////////
-
-            // Prepare reference by identifying telomere contigs and extracting/orientating
-            check_reference(reference_channel)
-
-            // Trim reads by restriction site
-            processed_read_channel = trim_restriction_site(valid_samples_with_stats.map{items -> items[0..1]})
-
-            ////////////////////////////////////////////
-            // Map to Reference and Generate Results
-            ////////////////////////////////////////////
-
-            reference_channel2 = check_reference.out.reference
-
-            // Trim reads by restriction site for reference
-            trim_restriction_site_ref(reference_channel2)
-
-            //last telomere repeat location on the reference from the enzyme for each chr
-            telo_site_channel = telomere_sites(trim_restriction_site_ref.out.reference)
-
+        if (params.mapping) {
             //map filtered telomere reads to genome and filter using mapq (default=4)
-            mapping(processed_read_channel.join(trim_restriction_site_ref.out.reference))
-
-            //Remove incorrectly mapped reads via NM
-            nm_filter(mapping.out.alignment)
-
-            //filter for min sequences 10 (0.15 of average coverage).
-            coverage_filter2(nm_filter.out.alignment
-            | join (trim_restriction_site_ref.out.reference)
-            | join (cov_filter))
-
-            //filter bam with high, low and no stringency but including mapping quality filter applied in previous step
-            filtering(coverage_filter2.out.alignment
-                | join (trim_restriction_site_ref.out.cutsites)
-                | join (telo_site_channel),
-                params.telomere_margin,
-            )
+            cleaned_alignments = align_and_process(valid_samples_with_stats.map{items -> 
+                def meta = items[0]
+                def reads = items[1]
+                [meta, reads, file(meta.reference)]
+            })
 
             // Generate final telomere statistics
             results(
-                filtering.out.finalbam
+                cleaned_alignments
                 | join(per_sample_stats.map{items -> [items[0], items[1]]}, by: 0)
-                | join(cov_filter, by: 0)
-                | join(check_reference.out.reference, by: 0)
+                | join(reference_channel, by: 0)
             )
             // Join the results summaries to the preprocessing stats
             aggregated_results = per_sample_stats
                 | join(results.out.for_report, by: 0)
+        } else {
+            aggregated_results = per_sample_stats
         }
         
         // Collect files in a working dir, so they can be used in the final report generation 
@@ -272,7 +202,7 @@ workflow pipeline {
             | collectFilesInDir
             | map { _meta, dirname -> dirname }
         // if we did mapping, make the alignment sections of the report
-        boolean make_mapping_report = !params.skip_mapping
+        boolean make_mapping_report = params.mapping
 
         makeReport(
             metadata,
@@ -284,14 +214,12 @@ workflow pipeline {
 
 }
 
-
 // entrypoint workflow
 workflow {
     WorkflowMain.initialise(workflow, params, log)
 
     Pinguscript.ping_start(nextflow, workflow, params)
 
-    // demo mutateParam
     if (params.containsKey("mutate_fastq")) {
         CWUtil.mutateParam(params, "fastq", params.mutate_fastq)
     }
@@ -316,6 +244,9 @@ workflow {
             "keep_unaligned": true,
         ])
     }
+    // Check provided reference exists
+    params.reference = params.reference ?: "${projectDir}/data/HG002qpMP_reference.fasta.gz"
+    assert file(params.reference).exists() : "ERROR: Provided reference does not exist: ${params.reference}"
 
     pipeline(samples)
 }
