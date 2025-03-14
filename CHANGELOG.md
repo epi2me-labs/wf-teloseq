@@ -15,11 +15,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Lenient filter extended to 2000 bp and if cut site before this then switch to cut site. This reduces some very low level mismapping tolerance. 
 - Lenient and strict filter changed to high and low stringency renaming.
 - The filtering the input data has been refactored, and boundary detection has been altered. This has removed several processes, collapsing them all down into one.
+- The alignment process has had it's maximum memory directive raised to 7Gb from 2Gb. We were seeing some occurrences of the process being killed for exceeding the memory cap on larger datasets when using higher thread counts.
 
 
 ### Removed
 - Removed the "de novo" guided route.
-
 
 ## [v0.0.4]
 ### Changed
@@ -28,8 +28,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [v0.0.3]
 ### Added
-- Paramater for min coverage if don't want 20% of average telomere read number over 92 chromosomes (default)
-- Paramater if you have protocol to capture both strands
+- Parameter for min coverage if don't want 20% of average telomere read number over 92 chromosomes (default)
+- Parameter if you have protocol to capture both strands
 - Adapter trimming (note not precise in terms of sequence removes as may take 1-2 telomere bases in removal but removes all adapter presence up to telomere)
 - Parameter for enzyme cut site sequence
 

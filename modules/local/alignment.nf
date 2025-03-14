@@ -1,7 +1,7 @@
 process align_and_process {
     label "wf_teloseq"
     cpus params.alignment_threads
-    memory "8.GB"
+    memory "7 GB"
 
     input:
         tuple val(meta), path("reads.fastq"), path("reference.fasta")
