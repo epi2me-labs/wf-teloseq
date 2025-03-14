@@ -166,6 +166,10 @@
             "description": "Everything else.",
             "default": "",
             "properties": {
+                "store_dir": {
+                    "type": "string",
+                    "hidden": true
+                },
                 "disable_ping": {
                     "type": "boolean",
                     "default": false,
