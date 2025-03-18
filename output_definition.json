@@ -3,7 +3,7 @@
     "workflow-report": {
       "filepath": "wf-teloseq-report.html",
       "title": "workflow report",
-      "description": "Report for all samples",
+      "description": "Report for all samples.",
       "mime-type": "text/html",
       "optional": false,
       "type": "aggregated"
@@ -24,92 +24,60 @@
       "optional": false,
       "type": "aggregated"
     },
-    "chr-stats-high": {
-      "filepath": "{{alias}}/results/high_filtered_chr_arm_coverage.csv",
-      "title": "Chromosome arm statistics using strict filtering",
-      "description": "Chromosome arm statistics using strict filtering.",
-      "mime-type": "text/csv",
+    "processed-fastq": {
+      "filepath": "{{alias}}/unaligned_data/{{alias}}_filtered_telomeric.fastq",
+      "title": "Unaligned, filtered and tagged sequences.",
+      "description": "These sequences have been tagged (valid SAM format tags) on whether or not they passed filtering (qc:Z), and if detected, also tagged with the Telomere repeat boundary coordinates (tl:I).",
+      "mime-type": "text/plain",
       "optional": false,
       "type": "per-sample"
     },
-    "chr-stats-low": {
-      "filepath": "{{alias}}/results/low_filtered_chr_arm_coverage.csv",
-      "title": "Chromosome arm statistics using lenient filtering",
-      "description": "Chromosome arm statistics using lenient filtering.",
-      "mime-type": "text/csv",
+    "unaligned-metrics": {
+      "filepath": "{{alias}}/unaligned_data/{{alias}}_telomere_unaligned_metrics.tsv",
+      "title": "Summary metrics about detected telomere lengths within the sample.",
+      "description": "Aggregated summary metrics about reads which have passed all filtering, with a detected telomere repeat boundary.",
+      "mime-type": "text/tsv",
       "optional": false,
       "type": "per-sample"
     },
-    "per-read-stats-high": {
-      "filepath": "{{alias}}/results/high_filtered_per_read_telomere_length.csv",
-      "title": "Per telomere read statistics using strict filtering",
-      "description": "Per telomere read statistics using strict filtering.",
-      "mime-type": "text/csv",
-      "optional": false,
-      "type": "per-sample"
-    },
-    "per-read-stats-low": {
-      "filepath": "{{alias}}/results/low_filtered_per_read_telomere_length.csv",
-      "title": "Per telomere read statistics using lenient filtering",
-      "description": "Per telomere read statistics using lenient filtering.",
-      "mime-type": "text/csv",
-      "optional": false,
-      "type": "per-sample"
-    },
-    "per-read-stats-none": {
-      "filepath": "{{alias}}/results/no_filtered_per_read_telomere_length.csv",
-      "title": "Per telomere read statistics using no filtering",
-      "description": "Per telomere read statistics using no filtering.",
-      "mime-type": "text/csv",
-      "optional": false,
-      "type": "per-sample"
-    },
-    "per-read-stats-bulk": {
-      "filepath": "{{alias}}/results/sample_raw_per_read_telomere_length.csv",
-      "title": "Per telomere read statistics of bulk",
-      "description": "Per telomere read statistics of bulk.",
-      "mime-type": "text/csv",
-      "optional": false,
-      "type": "per-sample"
-    },
-    "telomere-reads": {
-      "filepath": "{{alias}}/reads/reads_trimmed.fastq",
-      "title": "Trimmed telomere reads",
-      "description": "Adapter trimmed identified telomere reads.",
-      "mime-type": "application/fastq",
-      "optional": false,
-      "type": "per-sample"
-    },
-    "read-stats": {
-      "filepath": "{{alias}}/results/output.csv",
-      "title": "Read statistics",
-      "description": "Read stats for each filter.",
-      "mime-type": "text/csv",
-      "optional": false,
-      "type": "per-sample"
-    },
-    "bam-tagged": {
-      "filepath": "{{alias}}/alignments/{{alias}}.tagged.bam",
-      "title": "Aligned reads strict",
-      "description": "Aligned reads after strict filtering.",
+    "processed-bam": {
+      "filepath": "{{alias}}/aligned_data/alignment_filtered_teloseqs.bam",
+      "title": "Aligned, filtered and tagged sequences.",
+      "description": "Contains the sequences from the processed_fastq aligned to the provided reference. All sequences which passed initial read length (`--min_length`) and quality (`--read_quality`) filtering will be present, including unmapped. Only produced if alignment is performed.",
       "mime-type": "application/octet-stream",
-      "optional": false,
-      "type": "per-sample"
-    },
-    "reference-naming": {
-      "filepath": "{{alias}}/reference_naming/naming_summary.csv",
-      "title": "De novo contig naming",
-      "description": "Summary of blast results used for contig naming.",
-      "mime-type": "text/csv",
       "optional": true,
       "type": "per-sample"
     },
-    "sample-data": {
-      "filepath": "{{alias}}/alignments/filtered_reference.fasta",
-      "title": "Reference used for alignment",
-      "description": "Reference used for alignment after extraction.",
-      "mime-type": "application/fasta",
-      "optional": false,
+    "processed-bam-index": {
+      "filepath": "{{alias}}/aligned_data/alignment_filtered_teloseqs.bam.csi",
+      "title": "Accompanying index for the aligned BAM.",
+      "description": "Coordinate-sorted index file for the aligned data BAM.",
+      "mime-type": "application/octet-stream",
+      "optional": true,
+      "type": "per-sample"
+    },
+    "aligned-metrics": {
+      "filepath": "{{alias}}/aligned_data/{{alias}}_telomere_aligned_metrics.tsv",
+      "title": "Summary metrics about aligned telomere lengths within the sample.",
+      "description": "Aggregated summary metrics about detected telomere lengths within the sample, after alignment. Only reads which have primary alignments to the reference are considered.",
+      "mime-type": "text/tsv",
+      "optional": true,
+      "type": "per-sample"
+    },
+    "aligned-contig-metrics": {
+      "filepath": "{{alias}}/aligned_data/{{alias}}_contig_telomere_aligned_metrics.tsv",
+      "title": "Summary metrics about aligned telomere lengths grouped by target contig.",
+      "description": "Aggregated summary metrics about detected telomere lengths within the sample, after alignment. The reads are grouped by target contig, and only reads which have primary alignments to the reference are considered.",
+      "mime-type": "text/tsv",
+      "optional": true,
+      "type": "per-sample"
+    },
+    "qc-mode-summary-metrics": {
+      "filepath": "{{alias}}/aligned_data/{{alias}}_qc_modes_metrics.tsv",
+      "title": "Summary metrics about the filtering status of each read.",
+      "description": "Aggregated summary metrics of the filtering status of each read. Metrics displayed for each filtering status include count, mean Q score, length, and alignment identity (where applicable).",
+      "mime-type": "text/tsv",
+      "optional": true,
       "type": "per-sample"
     }
   }

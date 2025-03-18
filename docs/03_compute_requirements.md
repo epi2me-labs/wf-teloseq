@@ -8,6 +8,6 @@ Minimum requirements:
 + CPUs = 8
 + Memory = 16GB
 
-Approximate run time: 5/15/30 minutes per sample for pathway 1/2/3
+Approximate run time: Approx 5 minutes per sample, or about 1 minute if not performing alignment.
 
 ARM processor support: False

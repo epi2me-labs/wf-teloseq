@@ -1,53 +1,62 @@
 """Filter the aligned telomeric sequences, tagging them."""
 
-from functools import partial
 from pathlib import Path
 import sys
 
+import natsort
 import numpy as np
 import pandas as pd
 import pysam
+from workflow_glue import ts_utils
 
 from .util import get_named_logger, wf_parser  # noqa: ABS101,E501
 
+GOOD_PRIMARY = pysam.FUNMAP | pysam.FSECONDARY | pysam.FQCFAIL | pysam.FSUPPLEMENTARY
 
-def assign_haplotype(ref):
-    """Assign haplotype to given reference. High tech."""
-    ref_lower = ref.lower()
-    if "pat" in ref_lower:
-        ref_type = "Pat"
-    elif "mat" in ref_lower:
-        ref_type = "Mat"
-    else:
-        ref_type = "UH"
+
+def determine_haplotype(ref):
+    """Determine the haplotype of a given reference. High tech."""
+    ref_type = "UH"
+    if ref is not None:
+        ref_lower = ref.lower()
+        if "pat" in ref_lower:
+            ref_type = "Pat"
+        elif "mat" in ref_lower:
+            ref_type = "Mat"
     return ref_type
 
 
-def calculate_chr_box_stats(df):
-    """Calculate read statistics for a dataframe of read stats.
+# Function to compute box plot statistics
+def boxplot_stats(series):
+    """Calculate box plot stats and return."""
+    qmin, q1, median, q3, qmax = np.percentile(series, [0, 25, 50, 75, 100])
+    iqr = q3 - q1
+    lower_bound, upper_bound = max(qmin, q1 - 1.5 * iqr), min(qmax, q3 + 1.5 * iqr)
 
-    Returns a transformed dataframe, containing the min, Q1, median,
-    Q3 and max for each contig.
-    """
-    # Box plot requires the format
-    # [Min, Q1, Median, Q3, Max]
-    # Define partials for quantiles
-    quantile_25 = partial(pd.Series.quantile, q=0.25)
-    quantile_75 = partial(pd.Series.quantile, q=0.75)
-    numeric_cols = ["query_length", "telomere_length", "identity"]
-    df[numeric_cols] = df[numeric_cols].apply(pd.to_numeric)
-    chr_box_plots_data = (
-        df[(df["tp"] == "P") & (df["qc"] == "Good")]
-        .groupby("reference_name")["telomere_length"]
-        .agg((np.min, quantile_25, np.median, quantile_75, np.max))
-    )
-    return chr_box_plots_data
+    # Box plot min/max within whiskers
+    min_val = series[series >= lower_bound].min()
+    max_val = series[series <= upper_bound].max()
+
+    return {
+        "min": min_val,
+        "q1": q1,
+        "median": median,
+        "q3": q3,
+        "max": max_val,
+    }
+
+
+def get_tag_with_default(record, tag, default=None):
+    """Get a tag from an `AlignedSegment`, returning default if not present."""
+    try:
+        return record.get_tag(tag)
+    except KeyError:
+        return default
 
 
 def main(args):
     """Entry point."""
     logger = get_named_logger(__name__)
-    # (contig, assigned haplotype) -> raw data about record
     records = []
 
     with (
@@ -59,46 +68,127 @@ def main(args):
                 logger.info(f"Analysed {i} records.")
 
             record.set_tag(
-                "HP",
-                assign_haplotype(record.reference_name),
-                value_type="Z"
+                "HP", determine_haplotype(record.reference_name), value_type="Z"
             )
+            # Only want to analyse good primary mappings
+            analyse = False
             # de tag is the gap compressed identity as assigned by minimap2
             # see https://lh3.github.io/2018/11/25/on-the-definition-of-sequence-identity  # noqa: E501
-            identity = 1 - record.get_tag("de")
-            if identity < args.identity_threshold:
-                record.set_tag("qc", "BadAlign", value_type="Z")
+            # Only check identity for Primary alignments
+            if not (record.flag & GOOD_PRIMARY):
+                identity = 1 - record.get_tag("de")
+                if identity < args.identity_threshold:
+                    record.set_tag("qc", "BadAlign", value_type="Z")
+                else:
+                    # Consider this record in dataframe aggregations
+                    analyse = True
 
             bam_out.write(record)
             # Add line to stats generation
             records.append(
                 (
+                    record.query_name,
                     record.query_length,
                     record.get_tag("tl"),
                     record.reference_name,
                     record.get_tag("HP"),
-                    record.get_tag("de"),
+                    1 - get_tag_with_default(record, "de", 1),
                     record.get_tag("qc"),
-                    record.get_tag("tp"),
+                    np.median(record.query_qualities)
+                    if record.query_qualities
+                    else np.nan,
+                    analyse
                 )
             )
     # Make all reads into a dataframe.
     df = pd.DataFrame(
         records,
         columns=(
+            "read_id",
             "query_length",
             "telomere_length",
             "reference_name",
             "haplotype",
             "identity",
             "qc",
-            "tp",
+            "median_qual",
+            "analyse"
         ),
     )
 
-    chr_box_plot_data = calculate_chr_box_stats(df)
-    chr_box_plot_data.to_csv(args.boxplot_csv_name)
+    # Compute box plot stats per contig on primary alignments which passed
+    # all pipeline filtering
+    df_good_reads = df[(df["analyse"]) & (df["qc"] == "Good")]
+    boxplot_data = (
+        df_good_reads.groupby("reference_name")["telomere_length"]
+        .agg(boxplot_stats)
+        .apply(pd.Series)
+    )
+    boxplot_data = boxplot_data.loc[natsort.natsorted(boxplot_data.index)]
+    boxplot_data.to_csv(args.boxplot_tsv_name, sep="\t")
 
+    summary_data = ts_utils.process_telomere_stats(df_good_reads["telomere_length"])
+    summary_data["Sample"] = args.sample
+    summary_data.to_csv(
+        args.summary_tsv_name, index=False, sep="\t",
+        float_format="%.2f"
+    )
+
+    per_contig_summary_df = df_good_reads.groupby(
+        "reference_name", as_index=False
+    )["telomere_length"].apply(ts_utils.process_telomere_stats)
+    per_contig_summary_df.rename(
+        columns={"reference_name": "Contig name"}, inplace=True
+    )
+    per_contig_summary_df.sort_values(
+        "Contig name", inplace=True, key=natsort.natsort_key
+    )
+    per_contig_summary_df.to_csv(args.contig_summary_tsv_name, index=False, sep="\t")
+
+    # QC modes for reads
+    qc_df = df.set_index("read_id")
+    qc_df = (
+        qc_df.loc[qc_df.index.drop_duplicates()]
+        .groupby("qc", as_index=False)
+        .agg(
+            {
+                "query_length": ["size", "median"],
+                "median_qual": "median",
+                "identity": "median",
+            }
+        )
+    )
+    # Round median
+    qc_df[("query_length", "median")] = qc_df[
+        ("query_length", "median")
+    ].round(0).astype(int)
+    # Order the types of errors into the order the filters are applied
+    application_order = [
+        "TooShort",
+        "TooFewRepeats",
+        "StartNotRepeats",
+        "TooCloseEnd",
+        "LowSubTeloQual",
+        "TooErrorful",
+        "BadAlign",
+        "Good"
+    ]
+    qc_df["qc"] = qc_df["qc"].astype(
+        pd.CategoricalDtype(categories=application_order, ordered=True)
+    )
+    # Order the df
+    qc_df = qc_df.sort_values(by="qc")
+    qc_df.to_csv(
+        args.qc_tsv_name,
+        index=False,
+        header=[
+            "Status", "Total reads", "Median read length",
+            "Median quality", "Median identity"
+        ],
+        float_format="%.2f",
+        sep="\t",
+    )
+    # Index new BAM
     pysam.index("--csi", str(args.output_bam))
 
 
@@ -107,15 +197,29 @@ def argparser():
     parser = wf_parser("tag_bam_reads")
 
     parser.add_argument(
-            "--input-bam", type=Path, help="Input BAM file.", default=sys.stdin
+        "sample", type=str, help="Sample name.",
     )
     parser.add_argument(
-        "--output-bam", default=sys.stdout, type=Path,
-        help="Output BAM filename.",
+        "input_bam", help="Input BAM file. Use - for stdin."
     )
     parser.add_argument(
-        "--boxplot-csv-name", type=Path, default="chr_box_plot_data.csv",
-        help="Name of stats CSV file to output.",
+        "--output-bam", default=sys.stdout, help="Output BAM filename.",
+    )
+    parser.add_argument(
+        "--summary-tsv-name", type=Path, default="summary_stats.tsv",
+        help="Name of telomere length summary stats TSV file to output.",
+    )
+    parser.add_argument(
+        "--boxplot-tsv-name", type=Path, default="chr_box_plot_data.tsv",
+        help="Name of boxplot stats TSV file to output.",
+    )
+    parser.add_argument(
+        "--qc-tsv-name", type=Path, default="qc_mode_stats.tsv",
+        help="Name of assigned qc stats TSV file to output.",
+    )
+    parser.add_argument(
+        "--contig-summary-tsv-name", type=Path, default="contig_summary.tsv",
+        help="Name of telomere stats per contig TSV file to output.",
     )
     parser.add_argument(
         "--identity-threshold", type=float, default=0.8,

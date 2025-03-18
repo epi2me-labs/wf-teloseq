@@ -6,7 +6,6 @@ from pathlib import Path
 import random
 from unittest.mock import Mock
 
-import pandas as pd
 import pysam
 import pytest
 from workflow_glue.process_reads import (
@@ -14,7 +13,6 @@ from workflow_glue.process_reads import (
     find_telo_boundary,
     largest_error_cluster,
     main,
-    process_telomere_stats,
     TELOMERE_MOTIF,
     trim_adapters,
 )
@@ -167,77 +165,6 @@ def test_trim_adapters(
         assert trimmed_qual == quality_str, "Quality scores should remain unchanged"
 
 
-@pytest.mark.parametrize(
-    "input_data, expected_read_count, expected_mean, expected_max, expected_n50, expected_cv",  # noqa: E501
-    [
-        # Normal case: Various telomere lengths
-        (
-            [
-                ("read1", 1000),
-                ("read2", 1500),
-                ("read3", 1200),
-                ("read4", 1700),
-                ("read5", 1300),
-            ],
-            5,
-            1340,
-            1700,
-            1300,
-            0.2,
-        ),
-        # Identical lengths: Ensures CV is 0
-        (
-            [("read1", 1000), ("read2", 1000), ("read3", 1000)],
-            3,
-            1000,
-            1000,
-            1000,
-            0.0,
-        ),
-        # Zero mean case: Ensures division by zero is handled
-        (
-            [("read1", 0), ("read2", 0), ("read3", 0)],
-            3,
-            0,
-            0,
-            0,
-            0,
-        ),
-        # Single read case: Ensures correct computation when only one read is available
-        (
-            [("read1", 1500)],
-            1,
-            1500,
-            1500,
-            1500,  # N50 should be the only read length
-            0,  # CV should be 0 as there’s no variation
-        ),
-        # Empty table
-        ([], *[None] * 5),
-    ],
-)
-def test_process_telomere_stats(
-    input_data,
-    expected_read_count,
-    expected_mean,
-    expected_max,
-    expected_n50,
-    expected_cv,
-):
-    """Test calculating read length statistics."""
-    summary_df = process_telomere_stats(input_data)
-    # Special case empty input
-    if not input_data:
-        assert summary_df is None
-        return
-    assert isinstance(summary_df, pd.DataFrame)
-    assert summary_df["Read count"].iloc[0] == expected_read_count
-    assert summary_df["Telomere length mean"].iloc[0] == expected_mean
-    assert summary_df["Telomere length max"].iloc[0] == expected_max
-    assert summary_df["Telomere length N50"].iloc[0] == expected_n50
-    assert round(summary_df["Telomere length CV"].iloc[0], 2) == round(expected_cv, 2)
-
-
 def test_main(capsys, tmp_path):
     """Test main function.
 
@@ -247,10 +174,16 @@ def test_main(capsys, tmp_path):
     # get blasted into
     # oblivion afterwards
     os.chdir(tmp_path)
+    summary_tsv = tmp_path / "summary.tsv"
+
     args = Mock()
 
-    args.input = str((SCRIPT_DIR / "static" / "test_telomere_boundary.bam").resolve())
-    args.output = "/dev/null"
+    args.input_bam = str(
+        (SCRIPT_DIR / "static" / "test_telomere_boundary.bam").resolve()
+    )
+    args.output_bam = "/dev/null"
+    args.summary_tsv_name = summary_tsv
+    args.sample = "TEST"
     args.filter_width = 10
     args.min_repeats = 20
     args.start_window = 0.3
@@ -265,3 +198,4 @@ def test_main(capsys, tmp_path):
     main(args)
     captured = capsys.readouterr()
     assert "TooShort: 3, TooFewRepeats: 1, LowQuality: 5, StartNotRepeats: 2, Good: 3, TooErrorful: 2, TooCloseToEnd: 1" in captured.err  # noqa: E501
+    assert summary_tsv.exists()

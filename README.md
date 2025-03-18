@@ -10,13 +10,9 @@ A workflow to analyse telomere-enriched data generated using Oxford Nanopore’s
 
 Telo-Seq aims to measure telomere length accurately and assign each telomere to a chromosome arm. The experimental protocol and sequencing are described in separate Telo-Seq protocol and [Know-How](https://community.nanoporetech.com/knowledge/know-how/TELO-seq) documents. Telo-seq libraries are sequenced on Oxford Nanopore’s sequencing devices.
 
-`wf-teloseq` currently supports two alternative pathways to analyse Telo-Seq data: 
+`wf-teloseq` currently defaults to an alignment based analysis. Users can provide a reference, or use a default which has been created from the telomeric regions of the T2T, haplotyped HG002 human reference genome.
+Alternatively, a reference-less "bulk" analysis can be performed, which simply provides a combined length estimation for all telomeres in each sample, for use in cases where a suitable reference is not available. 
 
-•	Pathway 1: Overall telomeric read counts and telomere length only (i.e. this combines all reads, regardless of which chromosome they originated from).
-
-•	Pathway 2: Using a matching reference, determine telomere read length and count for each chromosome arm individually.
-
-•	Pathway 3: Creates a de novo reference, determine telomere read length and count for each chromosome arm individually.
 
 ## Note
 
@@ -36,7 +32,7 @@ Minimum requirements:
 + CPUs = 8
 + Memory = 16GB
 
-Approximate run time: 5/15/30 minutes per sample for pathway 1/2/3
+Approximate run time: Approx 5 minutes per sample, or about 1 minute if not performing alignment.
 
 ARM processor support: False
 
@@ -195,86 +191,84 @@ Output files may be aggregated including information for all samples or provided
 
 | Title | File path | Description | Per sample or aggregated |
 |-------|-----------|-------------|--------------------------|
-| workflow report | wf-teloseq-report.html | Report for all samples | aggregated |
+| workflow report | wf-teloseq-report.html | Report for all samples. | aggregated |
 | Tool versions | versions.txt | A CSV with per row tool and version. | aggregated |
 | Parameters from workflow | params.json | A json of all parameters selected in workflow. | aggregated |
-| Chromosome arm statistics using strict filtering | {{alias}}/results/high_filtered_chr_arm_coverage.csv | Chromosome arm statistics using strict filtering. | per-sample |
-| Chromosome arm statistics using lenient filtering | {{alias}}/results/low_filtered_chr_arm_coverage.csv | Chromosome arm statistics using lenient filtering. | per-sample |
-| Per telomere read statistics using strict filtering | {{alias}}/results/high_filtered_per_read_telomere_length.csv | Per telomere read statistics using strict filtering. | per-sample |
-| Per telomere read statistics using lenient filtering | {{alias}}/results/low_filtered_per_read_telomere_length.csv | Per telomere read statistics using lenient filtering. | per-sample |
-| Per telomere read statistics using no filtering | {{alias}}/results/no_filtered_per_read_telomere_length.csv | Per telomere read statistics using no filtering. | per-sample |
-| Per telomere read statistics of bulk | {{alias}}/results/sample_raw_per_read_telomere_length.csv | Per telomere read statistics of bulk. | per-sample |
-| Trimmed telomere reads | {{alias}}/reads/reads_trimmed.fastq | Adapter trimmed identified telomere reads. | per-sample |
-| Read statistics | {{alias}}/results/output.csv | Read stats for each filter. | per-sample |
-| Aligned reads strict | {{alias}}/alignments/{{alias}}.tagged.bam | Aligned reads after strict filtering. | per-sample |
-| De novo contig naming | {{alias}}/reference_naming/naming_summary.csv | Summary of blast results used for contig naming. | per-sample |
-| Reference used for alignment | {{alias}}/alignments/filtered_reference.fasta | Reference used for alignment after extraction. | per-sample |
+| Unaligned, filtered and tagged sequences. | {{alias}}/unaligned_data/{{alias}}_filtered_telomeric.fastq | These sequences have been tagged (valid SAM format tags) on whether or not they passed filtering (qc:Z), and if detected, also tagged with the Telomere repeat boundary coordinates (tl:I). | per-sample |
+| Summary metrics about detected telomere lengths within the sample. | {{alias}}/unaligned_data/{{alias}}_telomere_unaligned_metrics.tsv | Aggregated summary metrics about reads which have passed all filtering, with a detected telomere repeat boundary. | per-sample |
+| Aligned, filtered and tagged sequences. | {{alias}}/aligned_data/alignment_filtered_teloseqs.bam | Contains the sequences from the processed_fastq aligned to the provided reference. All sequences which passed initial read length (`--min_length`) and quality (`--read_quality`) filtering will be present, including unmapped. Only produced if alignment is performed. | per-sample |
+| Accompanying index for the aligned BAM. | {{alias}}/aligned_data/alignment_filtered_teloseqs.bam.csi | Coordinate-sorted index file for the aligned data BAM. | per-sample |
+| Summary metrics about aligned telomere lengths within the sample. | {{alias}}/aligned_data/{{alias}}_telomere_aligned_metrics.tsv | Aggregated summary metrics about detected telomere lengths within the sample, after alignment. Only reads which have primary alignments to the reference are considered. | per-sample |
+| Summary metrics about aligned telomere lengths grouped by target contig. | {{alias}}/aligned_data/{{alias}}_contig_telomere_aligned_metrics.tsv | Aggregated summary metrics about detected telomere lengths within the sample, after alignment. The reads are grouped by target contig, and only reads which have primary alignments to the reference are considered. | per-sample |
+| Summary metrics about the filtering status of each read. | {{alias}}/aligned_data/{{alias}}_qc_modes_metrics.tsv | Aggregated summary metrics of the filtering status of each read. Metrics displayed for each filtering status include count, mean Q score, length, and alignment identity (where applicable). | per-sample |
 
 
 
 
 ## Pipeline overview
 
-## Input
+The workflow is composed of two steps. 
+Firstly, reads undergo initial basic length and quality control filtering, followed by analysis to determine the telomeric boundary, and filtering to remove reads where the boundary is likely incorrect.
+If alignment is enabled (default), all reads (irrespective of boundary determination) are then aligned to a reference. Reads with primary alignments with good telomere boundaries are then aggregated, before statistics about the estimated lengths of each contigs telomeresß are generated. 
+
+## 1. Input and Sequence preparation.
 
 `wf-teloseq` requires basecalled nanopore reads in FASTQ or BAM format as input.
-For best results, we recommend to use at least 1000 telomere reads per sample for pathway 2 and 2000 for pathway 3.
-Per default if a reference is not provided via the `--reference` or the `--sample_sheet` parameter, then a telomere reference constructed from HG002 (`data/HG002qpMP_reference.fasta.gz`) is used for pathway 2.
-
 We recommend basecalling with super accuracy (SUP) models.
-High accuracy (HAC) basecalling will also work but will result in slightly reduced number of telomere reads.
-See our [Know-How document](https://community.nanoporetech.com/knowledge/know-how/TELO-seq) for further information on this.
+High accuracy (HAC) basecalling will also work but will result in a slightly reduced number of telomeric reads of sufficient quality for analysis.
+For best results, we recommend a minimum of 1000 telomere reads per sample for alignment based analyses.
+If a reference is not provided via the `--reference` or `--sample_sheet` parameter, then a telomere reference constructed from HG002 (`data/HG002qpMP_reference.fasta.gz`) is used by default for alignment.
 
-The pathway 2 workflow will search both ends of each reference sequence for telomeric repeats (of `TAACCC`) and the first occurrence of the restriction enzyme motif provided by `--restriction_site` (per default `GATATC` for EcoRV).
-It will then
-* extract the telomere until `--ref_add_margin` after the restriction site
-* attempt to reduce bias in the later alignment step leading to incorrect assignment of primary and secondary alignments caused by reference telomere length differences and thus alignment lengths used in mapping scores by
-    * trimming the telomere sequence to first repeat so to not introduce a variant and impact upon telomere length measurements
-    * extending the sequence with a "synthetic" telomere sequence of 4000 repeats of `TAACCC` to prevent incorrect read placement via secondary and primary mappings.
-
-The reads are then aligned against the reference + filtered (see below for details) before determining telomere length + counts.
+See our [Know-How document](https://community.nanoporetech.com/knowledge/know-how/TELO-seq) for further information.
 
 
-## Output 
+## 2. Read filtering and tagging
+Filters are listed in the order that they are applied.
+The first two filters are tunable with the params `--min_length` and `--read_quality`. 
+Other filters are currently not tunable via parameters.
 
-`wf-teloseq` outputs aligned telomere reads in BAM format and telomere length statistics in CSV format. It also produces a HTML report to summarise run results. Unless reference analysis is disabled, an overall telomere length estimate is given for each sample. Otherwise, the pipeline also reports the mean telomere lengths of reads assigned to individual chromosome arms. Only chromosome arms (or contigs) with at least the calculated 0.15% average chr coverage, will be reported.
+Reads which fail a check are tagged with a `qc:Z:<Tag>` tag, in either the output FASTQ if not performing alignment or the output BAM.
+Tags for corresponding failure modes are listed below.
+Reads which pass all filtering checks are tagged with `qc:Z:Good`.
 
+| Filter               | Description                                                                 | Tag               |
+|----------------------|---------------------------------------------------------------------------|------------------|
+| **Minimum read length** | Reads under 100 bases long are discarded. Removed entirely.             | N/A              |
+| **Minimum Q score**  | Reads with a Mean Q score <9 are discarded. Removed entirely.            | N/A              |
+| **Too Short**        | The read was too short (less than 160 bases). Read is excluded from further analysis, is tagged as failing QC, remaining in output BAM. | TooShort        |
+| **Too Few Repeats**  | There were fewer than 20 telomeric repeat motifs across the entire read. Read is excluded from further analysis, is tagged as failing QC, remaining in output BAM. | TooFewRepeats   |
+| **Start Not Repeats** | The first 30% of the read is not 80% repeats. Read is excluded from further analysis, is tagged as failing QC, remaining in output BAM. | StartNotRepeats |
+| **Too Close End**    | The telomeric boundary is too close (within 80 bases) of the end of the read. Read is excluded from further analysis, is tagged as failing QC, remaining in output BAM. | TooCloseEnd     |
+| **Low Sub-Telo Qual** | The mean basecall Q score of the region after the boundary is below a default value of 9. Read is excluded from further analysis, is tagged as failing QC, remaining in output BAM. | LowSubTeloQual  |
+| **Too Errorful**     | A large number of known basecall error motifs has been observed in the subtelomere. Read is excluded from further analysis, is tagged as failing QC, remaining in output BAM. | TooErrorful     |
 
-## Different filters applied in the pipeline
+The following filter is only applied if alignment is performed:
+| Filter               | Description                                                                 | Tag               |
+|----------------------|---------------------------------------------------------------------------|------------------|
+| **Bad Alignment**    | Query read has a low Gap compressed identity to the reference. Read is excluded from further analysis, is tagged as failing QC, remaining in output BAM. | BadAlign        |
 
-| Filter | Description |
-|-|-|
-| Applied to all | mapq score default is 4 but user can lower or raise if needed |   
-| none | no additional filters are applied so no additional reads removed. |   
-| low stringency | keep only reads in which the end mapping position is `--telomere_margin` (per default 2000 bp) beyond telomere boundary or cut site, whichever is shorter. This is to remove short telomere only reads that would not be chromosome arm specific and also could be truncated/fragmented. |
-| high stringency | keep only reads in which the start mapping position is before telomere boundary identification and end mapping position is within 25 bp of cut site with exception of cut sites beyond 45k as will get very few of these reads and will still map accurately. This is to ensure reads span subtelomere and to limit mismapping and fragmented reads. |
+All reads have a `tl:i` tag set, which represents the estimated telomere length. 
+For reads which a boundary CANNOT be determined, the value of this tag is set to -1.
 
+It is after this stage that a tagged FASTQ file is available per sample, with the tags present in the header.
 
+## 3. Alignment.
+By default, ALL reads are aligned by minimap2 (excepting reads which fail the initial minimum read length and Q score filters) after initial processing. 
+Alignment can be skipped by setting `--mapping false` when running the pipeline.
 
-## Test data
+### Default reference genome
 
-A small test dataset of reads is provided with `wf-teloseq` in "test_data" to help users test the workflow using Pathway 1 and 2. It consists of HG002 sample reads to test the installation and alternate references HG005 and YAO for non-matching reference method exploration.
+The telomere reference provided with the pipeline is based on the [HG002 telomere-to-telomere reference genome](https://github.com/marbl/hg002).
+Note that in this reference, the sub-telomeric sequence up to the EcoRV cut site in chromosome 13 (paternal) P arm is identical to chromosome 22 (paternal) P arm, so there is only one representative sequence present in the file, with a sequence name of `chr13_22_PATERNAL_P`.
+The pipeline does not separate out these two arms based upon telomere length from the single contig provided, which means the estimated telomere length assigned to this contig is likely inaccurate.
 
+### Processing of alignments
+After alignment, the alignments are used to aggregate stats based on the reference contigs.
+One final filtering step is first performed here, which is based on the Gap compressed identity between the query sequence and the target reference, as calculated by minimap2.
+Any read with an identity of less than 0.8 is excluded from the estimated telomere length statistics.
+Only primary alignments are used in this aggregation, and only those from reads which have the `qc:Z` tag set with a value of `Good`, indicating they passed all initial filtering steps.
 
-## Reference genome
-
-The telomere reference provided with the pipeline is based on the HG002 telomere-to-telomere reference genome. The pipeline requires all chromosome arms to be cut and orientated to 5'->3'. If you provide a different reference to the one in test_data folder, then the pipeline script will automatically cut the reference at enzyme cut sites +300bp where arms have telomere and extract to a new reference. Consequently, if using BAM files output from this pipeline (e.g. for IGV visualisation), always use the reference output by the pipeline. 
-
-In the supplied HG002 reference genome, the sub-telomeric sequence up to the EcoRV cut site in chromosome 13 (paternal) P arm is identical to chromosome 22 (paternal) P arm, so we only have one representative sequence in the reference provided. Although the telomere lengths cluster distinctly for these identical sequence identity arms, if two identical contigs are present there will be random mapping and a distorted telomere length estimate. The pipeline does not yet separate out these two arms based upon telomere length from the single contig provided but is planned in a future release.
-
-Human cell lines, and individuals, have genetic variation in their sub-telomeric regions. These may impact chromosome arm assignment if differences compared to the reference used in the analysis are substantial, or make the sub-telomeric regions indistinguishable. For most reliable chromosome arm telomere length estimation, it is recommended to use a genome reference for that specific sample (e.g. cell line or individual). Overall telomere length estimation (pathway 1) is not affected by this, as it is entirely reference-free. We provide de novo reference creation approach using clustering to produce a reference from the data for chr arm separation when a matching reference is not available (pathway 3). Naming of contigs is limited to ~45 contigs that can be confidently named. High similarity of half the chr arm subtelomeres makes it difficult to assign which chromosome they correspond to but variation exists that can be used to separate out the chr arms in the de novo reference construction.  
-
-
-## Run time
-
-Running a typical Telo-Seq dataset (4K telomere reads) through `wf-teloseq` with matching sample human chromosome arm mapping assignment takes approximately 5 minutes and non-matching >1 hr. When skipping the mapping stage (`--skip_mapping`), it takes less than 3 minutes.
-
-
-## Running in Epi2me labs via Windows on a laptop 
-
-Install the EPI2ME Desktop application [epi2me](https://labs.epi2me.io/downloads/). In the Workflows tab, select import and enter the url for this github repository (https://github.com/nanoporetech/wf-teloseq) to download the workflow. If restrictions are still in place or you have difficulty, then download the code and put in the local "workflows" folder for your epi2me installation then the workflow will be installed and available.
-
-Pipeline outputs can be found in the publishDir location, shown in the "Parameters" box within your run analysis page.
+After this stage a tagged BAM file containing both mapped and unmapped reads is produced and output per sample.
 
 
 
@@ -302,21 +296,6 @@ If your question is not answered here, please report any issues or suggestions o
 Telo-Seq has only been tested on human data, but we expect it to work well on species with similar telomere repeat sequences.
 
 Telomere sequences are highly repetitive. Sometimes basecalling errors cause dense mis-basecalled repeats to occur in Telo-seq reads. These get soft-clipped off by the aligner in downstream analysis, which could result in underestimation of telomere lengths. `wf-teloseq` identifies such reads and excludes them from telomere length estimation.
-
-
-# Acknowledgements
-
-This project uses code in the "telomerewindowV1.py" script from the following source:
-
-- **Original Author:** Ramin Kahidi
-- **Original Repository:** https://github.com/GreiderLab/TeloBP
-
-The code used is licensed under the MIT License, which can be found in the original repository and the header of the script.
-
-Publication: Karimian K, Groot A, Huso V, Kahidi R, Tan KT, Sholes S, Keener R, McDyer JF, Alder JK, Li H, Rechtsteiner A, Greider CW. Human telomere length is chromosome specific and conserved across individuals. 2024 Jan 13:2023.12.21.572870. doi: 10.1101/2023.12.21.572870. Update in: Science. 2024 May 3;384(6695):533-539. doi: 10.1126/science.ado0431. PMID: 38187739; PMCID: PMC10769321.
-
-
-# Epi2Me
 
 + [Importing third-party workflows into EPI2ME Labs](https://labs.epi2me.io/nexflow-for-epi2melabs/)
 

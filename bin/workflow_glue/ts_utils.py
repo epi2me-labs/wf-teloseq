@@ -1,11 +1,12 @@
 """Shared code for teloseq wf-glue."""
 
 import numpy as np
+import pandas as pd
 
 
 def calculate_n50(data):
     """
-    Calculate N50 for a sequence.
+    Calculate N50 for a sequence of values.
 
     Raises
     ------
@@ -21,6 +22,7 @@ def calculate_n50(data):
     cumulative_sum = np.cumsum(sorted_lengths)
     half_sum = cumulative_sum[-1] / 2
     index = np.searchsorted(cumulative_sum, half_sum)
+
     return sorted_lengths[index]
 
 
@@ -45,3 +47,62 @@ def calculate_cv(data, ddof=1):
     series_mean = np.mean(data)
     series_std = np.std(data, ddof=ddof)
     return np.nan_to_num(series_std / series_mean)
+
+
+def process_telomere_stats(series):
+    """
+    Process telomere length statistics and output summary metric and per record CSVs.
+
+    Compute various summary statistics, returning the results and the input as
+      dataframes.
+
+    Parameters
+    ----------
+    :param telomere_lengths: List of tuples containing read IDs and telomere lengths.
+    :type telomere_lengths: list[tuple[str, int]]
+
+    Returns
+    -------
+    :param summary_df: Summary dataframe containing aggregated stats for
+        the provided read lengths
+    :param telomere_length_df: The raw lengths of the data frame.
+    """
+    if series.empty:
+        return None
+
+    # Define aggregation functions
+    agg_functions = {
+        "Read count": "size",
+        "Yield": "sum",
+        "Min length": "min",
+        "Mean length": "mean",
+        "Max length": "max",
+    }
+
+    # Aggregate statistics
+    summary_stats = series.agg(agg_functions)
+    # Annoyingly the CV and N50 functions throw errors if included in the agg functions,
+    # so run separately
+    # See https://stackoverflow.com/questions/68091853/python-cannot-perform-both-aggregation-and-transformation-operations-simultaneo  # noqa: E501
+    summary_stats["CV"] = calculate_cv(series.values)
+    summary_stats["N50"] = calculate_n50(series.values)
+    summary_df = summary_stats.to_frame().T
+    # Round to human friendly DP
+    summary_df = summary_df.round({"N50": 2, "CV": 2})
+    # These make the most sense as whole ints
+    int_fields = [
+        "Read count",
+        "Yield",
+        "Min length",
+        "Mean length",
+        "Max length",
+        "N50",
+    ]
+    summary_df[int_fields] = (
+        summary_df[int_fields]
+        .apply(pd.to_numeric, errors="coerce")
+        .fillna(0)
+        .astype(int)
+    )
+
+    return summary_df
