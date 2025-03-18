@@ -7,7 +7,6 @@ Reads passing all checks are emitted to stdout.
 """
 
 from collections import Counter
-import csv
 import enum
 from pathlib import Path
 import re
@@ -18,7 +17,7 @@ import numpy as np
 import pandas as pd
 import pysam
 from scipy import ndimage
-from workflow_glue.ts_utils import calculate_cv, calculate_n50
+from workflow_glue import ts_utils
 
 from .util import wf_parser  # noqa: ABS101
 
@@ -92,22 +91,6 @@ class BoundaryFinder(enum.Enum):
     TooErrorful = "TooErrorful"
     # Basecalls after boundary have low Q score
     LowQuality = "LowSubTeloQual"
-
-
-def dump_to_csv(filename, data, header=None):
-    """Dump elements in the provided list to a csv.
-
-    Parameters
-    ----------
-    :param filename: Filename to write to.
-    :param data: list of sequences to be written. Each sequence must be equal length
-    :param header: Header of the csv. If None, no header is written
-    """
-    with open(filename, mode="w", newline="") as file:
-        writer = csv.writer(file)
-        if header:
-            writer.writerow(header)
-        writer.writerows(data)
 
 
 def find_telo_boundary(
@@ -224,64 +207,6 @@ def trim_adapters(record, adapters, prefix=200, max_errors=3):
     return record
 
 
-def process_telomere_stats(telomere_lengths):
-    """
-    Process telomere length statistics and output summary metric and per record CSVs.
-
-    Compute various summary statistics, returning the results and the input as
-      dataframes.
-
-    Parameters
-    ----------
-    :param telomere_lengths: List of tuples containing read IDs and telomere lengths.
-    :type telomere_lengths: list[tuple[str, int]]
-
-    Returns
-    -------
-    :param summary_df: Summary dataframe containing agregated stats for
-        the provided read lengths
-    :param telomere_length_df: The raw lengths of the data frame.
-    """
-    telomere_length_df = pd.DataFrame(
-        telomere_lengths, columns=["Read_ID", "Telomere_length"]
-    )
-    if telomere_length_df.empty:
-        return None
-
-    # Define aggregation functions
-    agg_functions = {
-        "Read count": "size",
-        "Telomere length mean": "mean",
-        "Telomere length SD": "std",
-        "Telomere length max": "max",
-        "Telomere length N50": calculate_n50,
-    }
-
-    # Aggregate statistics
-    summary_stats = telomere_length_df["Telomere_length"].agg(agg_functions)
-    # Wierdly the CV function throws an error if included in the agg functions,
-    # so it's run separately
-    # See https://stackoverflow.com/questions/68091853/python-cannot-perform-both-aggregation-and-transformation-operations-simultaneo  # noqa: E501
-    summary_stats["Telomere length CV"] = calculate_cv(
-        telomere_length_df["Telomere_length"].values
-    )
-    summary_df = summary_stats.to_frame().T
-    # Round to human friendly DP
-    summary_df.round(
-        {
-            "Telomere length mean": 0,
-            "Telomere length SD": 2,
-            "Telomere length max": 0,
-            "Telomere length N50": 2,
-        }
-    )
-    # These make the most sense as whole ints
-    summary_df[["Telomere length mean", "Telomere length N50"]] = summary_df[
-        ["Telomere length mean", "Telomere length N50"]
-    ].astype(int)
-    return summary_df
-
-
 def main(args):
     """Process input file to find telomere boundaries."""
     barcodes = BARCODES
@@ -290,9 +215,11 @@ def main(args):
     # Track a count of how we do on these reads
     boundary_result_count = Counter()
     boundaries = []
+    qualities = []
+
     with (
-        pysam.AlignmentFile(args.input, mode="r", check_sq=False) as bam_in,
-        pysam.AlignmentFile(args.output, mode="w", template=bam_in) as bam_out
+        pysam.AlignmentFile(args.input_bam, mode="r", check_sq=False) as bam_in,
+        pysam.AlignmentFile(args.output_bam, mode="w", template=bam_in) as bam_out
     ):
         for i, record in enumerate(bam_in):
             if i and i % 25000 == 0:
@@ -349,18 +276,20 @@ def main(args):
             record.set_tag("qc", classification.value, value_type="Z")
             # Add the telomere boundary location to the comment
             bam_out.write(record)
-            boundaries.append((record.query_name, boundary))
 
-    summary_df = process_telomere_stats(boundaries)
-    if summary_df is not None:
-        summary_df.to_csv("telomere_length_metrics.csv", index=False)
-    if boundaries:
-        # Wrire telomeric sequence lengths to CSV
-        dump_to_csv(
-            "read_telomere_lengths.csv",
-            boundaries,
-            ("Read ID", "Telomere_length"),
+            # Gather boundary and mean quality of good reads
+            boundaries.append(boundary)
+            qualities.append(np.mean(record.query_qualities))
+    # Write the summary metrics out for use in report.
+    summary_data = ts_utils.process_telomere_stats(pd.Series(boundaries))
+    summary_data.insert(0, "Sample", args.sample)
+    if summary_data is not None:
+        summary_data.to_csv(
+            args.summary_tsv_name,
+            index=False, sep="\t",
+            float_format="%.2f",
         )
+    # Emit a short summary to stderr
     pretty_str = ", ".join(
         f"{key.name}: {value}" for key, value in boundary_result_count.items()
     )
@@ -371,11 +300,17 @@ def argparser():
     """Argument parser for entry point."""
     parser = wf_parser("ProReads")
     parser.add_argument(
-        "--input", default=sys.stdin.buffer,
-        help="Input BAM file"
+        "sample", type=str, help="Sample name."
     )
     parser.add_argument(
-        "--output", default=sys.stdout, type=Path, help="Output BAM file"
+        "input_bam",  help="Input BAM file. Use - for stdin."
+    )
+    parser.add_argument(
+        "--output-bam", default=sys.stdout, help="Output BAM file."
+    )
+    parser.add_argument(
+        "--summary-tsv-name", type=Path, default="unaligned_summary_stats.tsv",
+        help="Name of stats TSV file to output.",
     )
     # Motif and read filtering options
     grp = parser.add_argument_group(

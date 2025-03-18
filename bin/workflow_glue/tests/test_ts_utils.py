@@ -3,7 +3,11 @@
 import numpy as np
 import pandas as pd
 import pytest
-from workflow_glue.ts_utils import calculate_cv, calculate_n50
+from workflow_glue.ts_utils import (
+    calculate_cv,
+    calculate_n50,
+    process_telomere_stats,
+)
 
 
 @pytest.mark.parametrize(
@@ -55,3 +59,78 @@ def test_calculate_cv_invalid(array):
         ValueError, match="Input sequence is non numeric or contains NaN values."
     ):
         calculate_cv(array)
+
+
+@pytest.mark.parametrize(
+    "series, expected_read_count, expected_yield, expected_min, expected_mean, expected_max, expected_n50, expected_cv",  # noqa: E501
+    [
+        (
+            pd.Series([], dtype=float),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ),  # Empty series
+        (
+            pd.Series([100, 200, 300, 400, 500]),
+            5,  # Read count
+            1500,  # Yield (sum)
+            100,  # Min length
+            300,  # Mean length
+            500,  # Max length
+            int(calculate_n50(pd.Series([100, 200, 300, 400, 500]))),  # N50
+            round(calculate_cv(np.array([100, 200, 300, 400, 500])), 2),  # CV
+        ),  # Normal case
+        (
+            pd.Series([150]),
+            1,  # Read count
+            150,  # Yield (sum)
+            150,  # Min length
+            150,  # Mean length
+            150,  # Max length
+            150,  # N50
+            0.0,  # CV (should be 0 for single value)
+        ),
+        (
+            pd.Series([200, 200, 200, 200, 200]),
+            5,  # Read count
+            1000,  # Yield (sum)
+            200,  # Min length
+            200,  # Mean length
+            200,  # Max length
+            200,  # N50
+            0.0,  # CV (should be 0 for identical values)
+        ),
+    ],
+)
+def test_process_telomere_stats(
+    series,
+    expected_read_count,
+    expected_yield,
+    expected_min,
+    expected_mean,
+    expected_max,
+    expected_n50,
+    expected_cv,
+):
+    """Parameterized test for process_telomere_stats function."""
+    result = process_telomere_stats(series)
+
+    if series.empty:
+        assert result is None
+    else:
+        assert isinstance(result, pd.DataFrame)
+        assert result["Read count"].iloc[0] == expected_read_count, (
+            "Read count incorrect"
+        )
+        assert result["Yield"].iloc[0] == expected_yield, "Yield incorrect"
+        assert result["Min length"].iloc[0] == expected_min, "Min length incorrect"
+        assert result["Mean length"].iloc[0] == expected_mean, "Mean length incorrect"
+        assert result["Max length"].iloc[0] == expected_max, "Max length incorrect"
+        assert result["N50"].iloc[0] == expected_n50, "N50 incorrect"
+        assert np.isclose(result["CV"].iloc[0], expected_cv, equal_nan=True), (
+            "CV incorrect"
+        )

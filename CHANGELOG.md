@@ -6,20 +6,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased]
 ### Added
-- Added coefficient of variance into report.
-- Added naming of contigs using EcoRV pangenome for Human but user can supply their own pangenome. Limited to those can name with certainty, which is approximately halve of paternal/maternal arms due to similarity that also makes mapping to a pangenome problematic.
 - Addition of reference to meta data allows for use of different references per sample via --sample_sheet option and use of the same keys throughout pipeline.
+- New tags for telomere boundary, quality control outcomes and haplotype for each read.
 
 ### Changed
-- Re-written the de novo guided route to be fully de novo.
-- Lenient filter extended to 2000 bp and if cut site before this then switch to cut site. This reduces some very low level mismapping tolerance. 
-- Lenient and strict filter changed to high and low stringency renaming.
 - The filtering the input data has been refactored, and boundary detection has been altered. This has removed several processes, collapsing them all down into one.
+- Added custom script for boundary detection, which detects the coordinate of large shifts in the density of telomeric repeats.
 - The alignment process has had it's maximum memory directive raised to 7Gb from 2Gb. We were seeing some occurrences of the process being killed for exceeding the memory cap on larger datasets when using higher thread counts.
-
+- Documentation has been updated and rewritten.
+- Output BAM now contains all input data, even unmapped and those lacking detectable telomeric boundaries, allowing for further analysis by the user.
 
 ### Removed
 - Removed the "de novo" guided route.
+- Removed the Greider telomere boundary detection code.
 
 ## [v0.0.4]
 ### Changed

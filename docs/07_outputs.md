@@ -2,17 +2,13 @@ Output files may be aggregated including information for all samples or provided
 
 | Title | File path | Description | Per sample or aggregated |
 |-------|-----------|-------------|--------------------------|
-| workflow report | wf-teloseq-report.html | Report for all samples | aggregated |
+| workflow report | wf-teloseq-report.html | Report for all samples. | aggregated |
 | Tool versions | versions.txt | A CSV with per row tool and version. | aggregated |
 | Parameters from workflow | params.json | A json of all parameters selected in workflow. | aggregated |
-| Chromosome arm statistics using strict filtering | {{alias}}/results/high_filtered_chr_arm_coverage.csv | Chromosome arm statistics using strict filtering. | per-sample |
-| Chromosome arm statistics using lenient filtering | {{alias}}/results/low_filtered_chr_arm_coverage.csv | Chromosome arm statistics using lenient filtering. | per-sample |
-| Per telomere read statistics using strict filtering | {{alias}}/results/high_filtered_per_read_telomere_length.csv | Per telomere read statistics using strict filtering. | per-sample |
-| Per telomere read statistics using lenient filtering | {{alias}}/results/low_filtered_per_read_telomere_length.csv | Per telomere read statistics using lenient filtering. | per-sample |
-| Per telomere read statistics using no filtering | {{alias}}/results/no_filtered_per_read_telomere_length.csv | Per telomere read statistics using no filtering. | per-sample |
-| Per telomere read statistics of bulk | {{alias}}/results/sample_raw_per_read_telomere_length.csv | Per telomere read statistics of bulk. | per-sample |
-| Trimmed telomere reads | {{alias}}/reads/reads_trimmed.fastq | Adapter trimmed identified telomere reads. | per-sample |
-| Read statistics | {{alias}}/results/output.csv | Read stats for each filter. | per-sample |
-| Aligned reads strict | {{alias}}/alignments/{{alias}}.tagged.bam | Aligned reads after strict filtering. | per-sample |
-| De novo contig naming | {{alias}}/reference_naming/naming_summary.csv | Summary of blast results used for contig naming. | per-sample |
-| Reference used for alignment | {{alias}}/alignments/filtered_reference.fasta | Reference used for alignment after extraction. | per-sample |
+| Unaligned, filtered and tagged sequences. | {{alias}}/unaligned_data/{{alias}}_filtered_telomeric.fastq | These sequences have been tagged (valid SAM format tags) on whether or not they passed filtering (qc:Z), and if detected, also tagged with the Telomere repeat boundary coordinates (tl:I). | per-sample |
+| Summary metrics about detected telomere lengths within the sample. | {{alias}}/unaligned_data/{{alias}}_telomere_unaligned_metrics.tsv | Aggregated summary metrics about reads which have passed all filtering, with a detected telomere repeat boundary. | per-sample |
+| Aligned, filtered and tagged sequences. | {{alias}}/aligned_data/alignment_filtered_teloseqs.bam | Contains the sequences from the processed_fastq aligned to the provided reference. All sequences which passed initial read length (`--min_length`) and quality (`--read_quality`) filtering will be present, including unmapped. Only produced if alignment is performed. | per-sample |
+| Accompanying index for the aligned BAM. | {{alias}}/aligned_data/alignment_filtered_teloseqs.bam.csi | Coordinate-sorted index file for the aligned data BAM. | per-sample |
+| Summary metrics about aligned telomere lengths within the sample. | {{alias}}/aligned_data/{{alias}}_telomere_aligned_metrics.tsv | Aggregated summary metrics about detected telomere lengths within the sample, after alignment. Only reads which have primary alignments to the reference are considered. | per-sample |
+| Summary metrics about aligned telomere lengths grouped by target contig. | {{alias}}/aligned_data/{{alias}}_contig_telomere_aligned_metrics.tsv | Aggregated summary metrics about detected telomere lengths within the sample, after alignment. The reads are grouped by target contig, and only reads which have primary alignments to the reference are considered. | per-sample |
+| Summary metrics about the filtering status of each read. | {{alias}}/aligned_data/{{alias}}_qc_modes_metrics.tsv | Aggregated summary metrics of the filtering status of each read. Metrics displayed for each filtering status include count, mean Q score, length, and alignment identity (where applicable). | per-sample |

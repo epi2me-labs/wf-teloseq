@@ -6,7 +6,7 @@ This data is used the CI pipeline intgration tests.
 
 - `sample_sheet_different_ref.csv`: An example sample sheet, using the additional reference column (detailed nowhere :fire:). Provides two samples, each to be mapped to a different reference.
 - `sample_sheet_same_ref.csv`: An example sample sheet, using the additional reference column (detailed nowhere :fire:). Provides two samples, each to be mapped to the same reference.
-- `HG002_small_test.fastq.gz`: Small subset of 1000 filtered telomere reads to test mapping and unmapped telomere estimation pathways.
+- `HG002_small_test.fastq.gz`: Small subset of 1000 filtered telomere reads to test mapping and unmapped bulk length estimation.
 - `YAOqpMP_reference.fa.gz`: Chinese public human genome with telomere contigs extracted and trimmed to restriction enzyme cutting location, example of an alternative reference.
 - `non_telomeric_1000.bam`: 1000 non telomeric human sequence reads. These reads are the first 1000 reads from the `demo.bam` file provided in the test data for `wf-human-variation`.
 - `expected_out/expected_default_output.csv`: The output of the telomeric assignment step as of 026b838ec942a3cad5de1f69f99fc7e0ccd32994.
