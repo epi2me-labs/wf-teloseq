@@ -157,7 +157,7 @@ input_reads.fastq   ─── input_directory  ─── input_directory
 
 | Nextflow parameter name  | Type | Description | Help | Default |
 |--------------------------|------|-------------|------|---------|
-| skip_mapping | boolean | Perform alignment to assign haplotypes to telomeric reads. | Use `--skip_mapping` if there is no suitable reference available. Only a bulk estimate of telomere length will be calculated. | False |
+| skip_mapping | boolean | Perform alignment to assign haplotypes to telomeric reads. | Use `--skip_mapping` if there is no suitable reference available. Only a bulk estimate of telomere lengths per sample will be calculated. | False |
 | alignment_threads | integer | Set max number of threads to use for alignment. |  | 8 |
 
 
@@ -172,13 +172,8 @@ input_reads.fastq   ─── input_directory  ─── input_directory
 
 | Nextflow parameter name  | Type | Description | Help | Default |
 |--------------------------|------|-------------|------|---------|
-| mapq | integer | Mapping quality filter parameter | Alignments to the reference with a mapping quality (MAPQ) score lower than this value will be discarded from further processing. | 4 |
-| min_length | integer | Minimum read length for filtering | Used in initial filtering of reads. This removes all reads which are either noise, artifacts or partial, and which cannot be full telomeric sequences. Setting this number too high runs the risk of artificially inflating calculated telomere lengths. | 100 |
-| read_quality | integer | Reads with a mean quality score lower than this value will be filtered out prior to analysis. |  | 9 |
-| restriction_site | string | Enzyme cut site | Restriction enzyme cut site used for filtering reads that are not close to this site for the strict setting | GATATC |
-| beyond_cut | integer | Amount of reference to include beyond cut site for each contig |  | 300 |
-| telomere_extension | integer | Addition of telomere to reference avoid mismapping | Reads primary and secondary alignments can be incorrect if one similar reference contig has longer telomere that allows read to match to it better than the other contig | 4000 |
-| telomere_margin | integer | Distance from telomere boundary to use to remove reads whose 3' end do not map up to this chromosome position. |  | 2000 |
+| min_length | integer | Minimum read length for filtering. | Used in the initial filtering of reads into the workflow. Reads with a sequence length less than this will be removed prior to analysis, and will not be present in the output files. This removes all reads which are either noise, artifacts or partial, and which cannot be full telomeric sequences. Setting this number too high runs the risk of removing short telomeres. | 100 |
+| read_quality | integer | Minimum read Q score for filtering. | Reads with a mean quality score lower than this value will be filtered out prior to analysis, and will not be present in the output files. | 9 |
 
 
 

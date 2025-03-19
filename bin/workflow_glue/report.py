@@ -124,11 +124,13 @@ def main(args):
         SeqSummary(stats_dirs, sample_names=sample_ids)
 
     with report.add_section(
-        "Telomere spanning read stats", "Telomere spanning read stats"
+        "Per sample telomere stats", "Per sample telomere stats"
     ):
         tags.p("""Statistics on all reads in a sample that have passed all filtering
                 and have been identified as spanning beyond the telomere repeat
-                boundary. Some key metrics are described below.""")
+                boundary. Length derived metrics are calculated using the estimated
+                length of the telomere repeats.
+                Some key metrics are described in more detail below.""")
         tags.ul(
             tags.li("Yield - The total number of bases sequenced for passing reads in a sample."),  # noqa: E501
             tags.li("CV - Coefficient of Variation, the standard deviation divided by the mean. Useful for comparing variation in measured telomere lengths between samples."),  # noqa: E501
