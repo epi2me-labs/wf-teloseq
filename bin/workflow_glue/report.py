@@ -20,7 +20,7 @@ from si_prefix import si_format
 from workflow_glue.util import get_named_logger, wf_parser  # noqa: ABS101
 
 
-def _format_dataframes(dataframe, base_columns, thousand_sep_columns=None):
+def _format_dataframes(dataframe, base_columns=None, thousand_sep_columns=None):
     """Format columns in the dataframe before adding to report.
 
     `base_columns` are formatted to strings with a human readable SI prefix
@@ -32,14 +32,14 @@ def _format_dataframes(dataframe, base_columns, thousand_sep_columns=None):
     """
     if thousand_sep_columns is None:
         thousand_sep_columns = [
-            'Read count', 'Min length', 'Mean length', 'Max length', 'N50']
+            'Read count', 'Min length', 'Mean length', 'Max length']
 
-    if base_columns:
+    if base_columns is not None:
         dataframe[base_columns] = dataframe[base_columns].apply(
             lambda bases: f"{si_format(bases, precision=2)}B"
         )
 
-    if thousand_sep_columns:
+    if thousand_sep_columns is not None:
         dataframe[thousand_sep_columns] = dataframe[thousand_sep_columns].apply(
             lambda x: x.apply(lambda y: f"{y:,.0f}")
         )
@@ -123,31 +123,6 @@ def main(args):
 
         SeqSummary(stats_dirs, sample_names=sample_ids)
 
-    with report.add_section(
-        "Per sample telomere stats", "Per sample telomere stats"
-    ):
-        tags.p("""Statistics on all reads in a sample that have passed all filtering
-                and have been identified as spanning beyond the telomere repeat
-                boundary. Length derived metrics are calculated using the estimated
-                length of the telomere repeats.
-                Some key metrics are described in more detail below.""")
-        tags.ul(
-            tags.li("Yield - The total number of bases sequenced for passing reads in a sample."),  # noqa: E501
-            tags.li("CV - Coefficient of Variation, the standard deviation divided by the mean. Useful for comparing variation in measured telomere lengths between samples."),  # noqa: E501
-            tags.li("N50 - 50% of total sequenced bases are contained in reads of this length or longer.")  # noqa: E501
-        )
-        dfs = []
-        for _sample, files in sample_files.items():
-            if file_path := files.get("telomere_unaligned_stats"):
-                dfs.append(pd.read_csv(file_path, sep="\t"))
-        if dfs:
-            df = pd.concat(dfs)
-            # Human readable yields, thousands sep (TODO - this might break sorting??)
-            df = _format_dataframes(df, base_columns="Yield")
-            DataTable.from_pandas(df, use_index=False, searchable=False, paging=False)
-        else:
-            tags.p("No statistics were generated.")
-
     with report.add_section("Filtering outcomes", "Filtering outcomes"):
         tags.p(
             """
@@ -180,7 +155,6 @@ def main(args):
                         df = pd.read_csv(file_path, sep="\t")
                         df = _format_dataframes(
                             df,
-                            base_columns=None,
                             thousand_sep_columns=["Median read length"]
                         )
                         DataTable.from_pandas(
@@ -215,27 +189,38 @@ def main(args):
                 else:
                     tags.p("No QC statistics file was found.")
 
+    with report.add_section(
+        "Alignment-free telomere measurements", "Telomere spanning read stats"
+    ):
+        tags.p("""Bulk estimate(s) of telomere lengths from reads passing all QC steps.
+                Some key metrics are described below.""")
+        dfs = []
+        for _sample, files in sample_files.items():
+            if file_path := files.get("telomere_unaligned_stats"):
+                dfs.append(pd.read_csv(file_path, sep="\t"))
+        if dfs:
+            df = pd.concat(dfs)
+            # Human readable yields, thousands sep (TODO - this might break sorting??)
+            df = _format_dataframes(df)
+            DataTable.from_pandas(df, use_index=False, searchable=False, paging=False)
+        else:
+            tags.p("No statistics were generated.")
+
     if alignment_performed:
         with report.add_section(
             "Aligned telomere lengths per contig", "Per contig summary"
         ):
-            tags.p("""Telomere length metrics grouped by alignment targets, as found
-                in the provided reference.
+            tags.p("""Telomere length metrics grouped by alignment targets.
                 Only primary alignments from
                 reads which passed the QC filtering stages above are considered.
                 Supplementary and secondary alignments for reads are not included.""")
 
-            tags.ul(
-                tags.li("Yield - The total number of bases sequenced for passing reads in a sample."),  # noqa: E501
-                tags.li("CV - Coefficient of Variation, the standard deviation divided by the mean. Useful for comparing variation in measured telomere lengths between aligned contigs."),  # noqa: E501
-                tags.li("N50 - 50% of total sequenced bases are contained in reads of this length or longer.")  # noqa: E501
-            )
             tabs = Tabs()
             for sample, files in sample_files.items():
                 with tabs.add_tab(sample):
                     if contig_file_path := files.get("contig_summary"):
                         df = pd.read_csv(contig_file_path, sep="\t")
-                        df = _format_dataframes(df, base_columns="Yield")
+                        df = _format_dataframes(df)
                         DataTable.from_pandas(df, use_index=False)
                     else:
                         tags.p("No alignment metrics file was found.")

@@ -4,25 +4,6 @@ import numpy as np
 import pandas as pd
 
 
-def calculate_n50(data):
-    """Calculate N50 for a sequence of values.
-
-    :raises ValueError: Raised if input data is non numeric or contains NaN values.
-    """
-    data = np.array(data)
-    if not np.issubdtype(data.dtype, np.number) or np.any(np.isnan(data)):
-        raise ValueError("Input sequence is non numeric or contains NaN values.")
-    # Empty input
-    if not data.size:
-        return None
-    sorted_lengths = np.sort(data)
-    cumulative_sum = np.cumsum(sorted_lengths)
-    half_sum = cumulative_sum[-1] / 2
-    index = np.searchsorted(cumulative_sum, half_sum)
-
-    return sorted_lengths[index]
-
-
 def calculate_cv(data, ddof=1):
     """Calculate the coefficient of variance for a sequence.
 
@@ -59,7 +40,6 @@ def process_telomere_stats(series):
     # Define aggregation functions
     agg_functions = {
         "Read count": "size",
-        "Yield": "sum",
         "Min length": "min",
         "Mean length": "mean",
         "Max length": "max",
@@ -71,18 +51,15 @@ def process_telomere_stats(series):
     # so run separately
     # See https://stackoverflow.com/questions/68091853/python-cannot-perform-both-aggregation-and-transformation-operations-simultaneo  # noqa: E501
     summary_stats["CV"] = calculate_cv(series.values)
-    summary_stats["N50"] = calculate_n50(series.values)
     summary_df = summary_stats.to_frame().T
     # Round to human friendly DP
-    summary_df = summary_df.round({"N50": 2, "CV": 2})
+    summary_df = summary_df.round({"CV": 2})
     # These make the most sense as whole ints
     int_fields = [
         "Read count",
-        "Yield",
         "Min length",
         "Mean length",
         "Max length",
-        "N50",
     ]
     summary_df[int_fields] = (
         summary_df[int_fields]
