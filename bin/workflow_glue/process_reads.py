@@ -94,19 +94,10 @@ class BoundaryFinder(enum.Enum):
 
 
 def find_telo_boundary(
-    record,
-    motif,
-    filter_width=8,
-    min_repeats=20,
-    start_window=0.3,
-    start_repeats=0.8,
-    min_qual_non_telo=9,
-):
-    """
-    Return the telomere boundary in the provided read, or None if read fails checks.
+        record, motif, filter_width=8, min_repeats=20, start_window=0.3,
+        start_repeats=0.8, min_qual_non_telo=9):
+    """Find telomere boundary in the provided read, or None if read fails checks.
 
-    Returns
-    -------
     :return: The detected telomere boundary position and classification status.
     :rtype: tuple[int | None, BoundaryFinder]
     """
@@ -164,13 +155,10 @@ def find_telo_boundary(
 
 
 def largest_error_cluster(sequence, last_position, distance=500):
-    """
-    Retrieve size of largest error motif clusters in the given sequence.
+    """Retrieve size of largest error motif clusters in the given sequence.
 
     Only bases before `last_position` are searched.
 
-    Returns
-    -------
     :return: The size of the largest detected error cluster.
     """
     errors = np.fromiter(
@@ -280,6 +268,7 @@ def main(args):
             # Gather boundary and mean quality of good reads
             boundaries.append(boundary)
             qualities.append(np.mean(record.query_qualities))
+
     # Write the summary metrics out for use in report.
     summary_data = ts_utils.process_telomere_stats(pd.Series(boundaries))
     summary_data.insert(0, "Sample", args.sample)
@@ -312,7 +301,8 @@ def argparser():
         "--summary-tsv-name", type=Path, default="unaligned_summary_stats.tsv",
         help="Name of stats TSV file to output.",
     )
-    # Motif and read filtering options
+
+    # Motif and read filtering
     grp = parser.add_argument_group(
         "Motif Detection and basic read filtering",
         "Parameters for telomere motif detection.",
@@ -337,7 +327,7 @@ def argparser():
         help="Skip trimming adapters and barcodes off of reads.",
     )
 
-    # Repeat filtering options
+    # Repeat filtering
     grp = parser.add_argument_group(
         "Start Repeat Filtering", "Filtering reads without repeats at the start."
     )
@@ -349,7 +339,8 @@ def argparser():
         "--start-repeats", type=float, default=0.8,
         help="Fraction of start window to require to be repeats.",
     )
-    # Edge detection options
+
+    # Edge detection
     grp = parser.add_argument_group(
         "Edge Detection", "Parameters for telomere edge detection."
     )
@@ -357,7 +348,8 @@ def argparser():
         "--filter-width", type=int, default=10,
         help="Width of edge filter window, as a multiple of motif length.",
     )
-    # Error filtering options
+
+    # Error filtering
     grp = parser.add_argument_group(
         "Error Filtering", "Filtering reads with pathological errors."
     )

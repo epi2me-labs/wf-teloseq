@@ -11,7 +11,8 @@ from workflow_glue import ts_utils
 
 from .util import get_named_logger, wf_parser  # noqa: ABS101,E501
 
-GOOD_PRIMARY = pysam.FUNMAP | pysam.FSECONDARY | pysam.FQCFAIL | pysam.FSUPPLEMENTARY
+NOT_GOOD_PRIMARY = (
+        pysam.FUNMAP | pysam.FSECONDARY | pysam.FQCFAIL | pysam.FSUPPLEMENTARY)
 
 
 def determine_haplotype(ref):
@@ -75,7 +76,7 @@ def main(args):
             # de tag is the gap compressed identity as assigned by minimap2
             # see https://lh3.github.io/2018/11/25/on-the-definition-of-sequence-identity  # noqa: E501
             # Only check identity for Primary alignments
-            if not (record.flag & GOOD_PRIMARY):
+            if not (record.flag & NOT_GOOD_PRIMARY):
                 identity = 1 - record.get_tag("de")
                 if identity < args.identity_threshold:
                     record.set_tag("qc", "BadAlign", value_type="Z")
