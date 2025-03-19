@@ -142,7 +142,7 @@ input_reads.fastq   ─── input_directory  ─── input_directory
 | fastq | string | FASTQ files to use in the analysis. | This accepts one of three cases: (i) the path to a single FASTQ file; (ii) the path to a top-level directory containing FASTQ files; (iii) the path to a directory containing one level of sub-directories which in turn contain FASTQ files. In the first and second case, a sample name can be supplied with `--sample`. In the last case, the data is assumed to be multiplexed with the names of the sub-directories as barcodes. In this case, a sample sheet can be provided with `--sample_sheet`. |  |
 | bam | string | BAM or unaligned BAM (uBAM) files to use in the analysis. | This accepts one of three cases: (i) the path to a single BAM file; (ii) the path to a top-level directory containing BAM files; (iii) the path to a directory containing one level of sub-directories which in turn contain BAM files. In the first and second case, a sample name can be supplied with `--sample`. In the last case, the data is assumed to be multiplexed with the names of the sub-directories as barcodes. In this case, a sample sheet can be provided with `--sample_sheet`. |  |
 | analyse_unclassified | boolean | Analyse unclassified reads from input directory. By default the workflow will not process reads in the unclassified directory. | If selected and if the input is a multiplex directory the workflow will also process the unclassified directory. | False |
-| reference | string | Reference genome of the sequenced sample. |  | data/HG002qpMP_reference.fasta.gz |
+| reference | string | Reference genome of the sequenced sample, if not specified a human derived telomere reference set will be used. |  |  |
 
 
 ### Sample Options
@@ -157,7 +157,7 @@ input_reads.fastq   ─── input_directory  ─── input_directory
 
 | Nextflow parameter name  | Type | Description | Help | Default |
 |--------------------------|------|-------------|------|---------|
-| mapping | boolean | Perform alignment to assign haplotypes to telomeric reads. | If selected the workflow will perform alignment to a provided reference or to the default HG002 based reference, allowing statistics to be resolved to the contig or haplotype level.  Apply `--mapping false` if there is no suitable reference available. This will generate statistics for reads with detected telomeric repeats, but will not assign haplotypes. If the reference is kept to only telomeric and subtelomeric regions, alignment should not add significant overhead. | True |
+| skip_mapping | boolean | Perform alignment to assign haplotypes to telomeric reads. | Use `--skip_mapping` if there is no suitable reference available. Only a bulk estimate of telomere length will be calculated. | False |
 | alignment_threads | integer | Set max number of threads to use for alignment. |  | 8 |
 
 

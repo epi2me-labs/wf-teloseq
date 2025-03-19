@@ -22,7 +22,7 @@ docker-run:
       - MATRIX_NAME: [
           "defaults",
           "bam_in",
-          "no_mapping",
+          "skip_mapping",
           "non_telomeric_reads",
           "missing_reference",
           "sample_sheet_same",
@@ -45,7 +45,7 @@ docker-run:
         NF_IGNORE_PROCESSES: coverage_calc
     - if: $MATRIX_NAME == "skip_mapping"
       variables:
-        NF_WORKFLOW_OPTS: "--fastq test_data/HG002_small_test.fastq.gz --mapping false --alignment_threads 2"
+        NF_WORKFLOW_OPTS: "--fastq test_data/HG002_small_test.fastq.gz --skip_mapping"
         NF_IGNORE_PROCESSES: coverage_calc
     - if: $MATRIX_NAME == "non_telomeric_reads"
       variables:
