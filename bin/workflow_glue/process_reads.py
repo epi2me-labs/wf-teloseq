@@ -217,6 +217,16 @@ def main(args):
             # adapters for all reads
             if not args.skip_trimming:
                 record = trim_adapters(record, barcodes)
+                # In the event the basecaller isn't used to trim (why?)
+                # There may be some reads are adapter+barcode, which are
+                # trimmed in their entirety
+                # This is a special case, so we will just skip the read
+                # entirely
+                if record.query_sequence is None:
+                    sys.stderr.write(
+                        f"Skipping read {record.query_name}, as it has no sequence left\n"  # noqa:E501
+                    )
+                    continue
 
             # Immediately tag the record with -1 for boundary coordinate
             # Only updated later if a boundary is detected

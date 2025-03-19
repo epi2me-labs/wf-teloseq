@@ -197,5 +197,7 @@ def test_main(capsys, tmp_path):
     # Run main function
     main(args)
     captured = capsys.readouterr()
+    # Added a read that gets trimmed:
+    assert "Skipping read d89f9da1-cc54-414e-b014-e1fcb053cd4b, as it has no sequence left" in captured.err  # noqa: E501
     assert "TooShort: 3, TooFewRepeats: 1, LowQuality: 5, StartNotRepeats: 2, Good: 3, TooErrorful: 2, TooCloseToEnd: 1" in captured.err  # noqa: E501
     assert summary_tsv.exists()
