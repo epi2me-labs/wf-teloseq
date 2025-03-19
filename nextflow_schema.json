@@ -38,9 +38,8 @@
                 "reference": {
                     "type": "string",
                     "format": "file-path",
-                    "default": "data/HG002qpMP_reference.fasta.gz",
                     "pattern": "^\\S+\\.(fasta|fa|fna|faa)(\\.gz)?$",
-                    "description": "Reference genome of the sequenced sample."
+                    "description": "Reference genome of the sequenced sample, if not specified a human derived telomere reference set will be used."
                 }
             },
             "oneOf": [
@@ -80,22 +79,17 @@
             "fa_icon": "fas fa-arrow-left",
             "description": "Parameters modifying TeloSeq pipeline behaviour",
             "properties": {
-                "mapping": {
+                "skip_mapping": {
                     "type": "boolean",
-                    "default": true,
+                    "default": false,
                     "description": "Perform alignment to assign haplotypes to telomeric reads.",
-                    "help_text": "If selected the workflow will perform alignment to a provided reference or to the default HG002 based reference, allowing statistics to be resolved to the contig or haplotype level.  Apply `--mapping false` if there is no suitable reference available. This will generate statistics for reads with detected telomeric repeats, but will not assign haplotypes. If the reference is kept to only telomeric and subtelomeric regions, alignment should not add significant overhead."
+                    "help_text": "Use `--skip_mapping` if there is no suitable reference available. Only a bulk estimate of telomere length will be calculated."
                 },
                 "alignment_threads": {
                     "type": "integer",
                     "default": 8,
                     "description": "Set max number of threads to use for alignment."
                 }
-            },
-            "dependencies": {
-                "mapping": [
-                    "reference"
-                ]
             }
         },
         "output": {

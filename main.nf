@@ -100,17 +100,13 @@ workflow pipeline {
         workflow_params = getParams()
         software_versions = getVersions()
 
-
         preprocessing = generic_preprocessing(samples)
         
         // Extract outputs from preprocessing
         metadata = preprocessing.metadata
         per_sample_stats = preprocessing.valid_samples_with_stats
 
-        // Define default reference, replaced by user option if supplied.
-        def default_ref = params.reference ? file(params.reference, checkIfExists: true) : file("$projectDir/data/HG002qpMP_reference.fasta.gz", checkIfExists: true)
-
-        if (params.mapping) {
+        if (!params.skip_mapping) {
             //map filtered telomere reads to genome and filter using mapq (default=4)
             aligned_outputs = align_and_process(per_sample_stats.map{items -> 
                 def meta = items[0]
@@ -119,7 +115,7 @@ workflow pipeline {
                 def stats_files = items[2..-1]
                 // Use default reference if user hasn't set one 
                 if (!meta.containsKey('reference')) {
-                    meta.reference = default_ref
+                    meta.reference = params.reference
                 }
                 [meta, reads, file(meta.reference), stats_files]
             })
@@ -177,8 +173,13 @@ workflow {
             "keep_unaligned": true,
         ])
     }
-    // Check provided reference exists
-    params.reference = params.reference ?: "${projectDir}/data/HG002qpMP_reference.fasta.gz"
+    
+    // use default reference if not provided, this is like this because a reference
+    // isn't strictly required when skip_mapping is set, and awkwardness in validating
+    // schema and params
+    if (!params.reference) {
+        CWUtil.mutateParam(params, "reference", "${projectDir}/data/HG002qpMP_reference.fasta.gz")
+    }
     assert file(params.reference).exists() : "ERROR: Provided reference does not exist: ${params.reference}"
 
     pipeline(samples)
