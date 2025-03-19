@@ -107,7 +107,7 @@ workflow pipeline {
         per_sample_stats = preprocessing.valid_samples_with_stats
 
         if (!params.skip_mapping) {
-            //map filtered telomere reads to genome and filter using mapq (default=4)
+            // map filtered telomere reads to genome
             aligned_outputs = align_and_process(per_sample_stats.map{items -> 
                 def meta = items[0]
                 def reads = items[1]
