@@ -5,11 +5,8 @@ import pandas as pd
 
 
 def calculate_n50(data):
-    """
-    Calculate N50 for a sequence of values.
+    """Calculate N50 for a sequence of values.
 
-    Raises
-    ------
     :raises ValueError: Raised if input data is non numeric or contains NaN values.
     """
     data = np.array(data)
@@ -27,18 +24,13 @@ def calculate_n50(data):
 
 
 def calculate_cv(data, ddof=1):
-    """
-    Calculate the coefficient of variance for a sequence.
+    """Calculate the coefficient of variance for a sequence.
 
     Uses the std deviation with 1 as the degrees of freedom,
     as this is likely to be sample of a larger population.
 
-    Parameters
-    ----------
     :param ddof: Degrees of freedom for calculating stddev.
 
-    Raises
-    ------
     :raises ValueError: Raised if input data is non numeric or contains NaN values.
     """
     data = np.array(data)
@@ -50,22 +42,16 @@ def calculate_cv(data, ddof=1):
 
 
 def process_telomere_stats(series):
-    """
-    Process telomere length statistics and output summary metric and per record CSVs.
+    """Process telomere length statistics, output summary metrics and CSVs.
 
     Compute various summary statistics, returning the results and the input as
       dataframes.
 
-    Parameters
-    ----------
     :param telomere_lengths: List of tuples containing read IDs and telomere lengths.
     :type telomere_lengths: list[tuple[str, int]]
 
-    Returns
-    -------
-    :param summary_df: Summary dataframe containing aggregated stats for
-        the provided read lengths
-    :param telomere_length_df: The raw lengths of the data frame.
+    :return: Summary dataframe containing aggregated stats for
+        the provided read lengths.
     """
     if series.empty:
         return None

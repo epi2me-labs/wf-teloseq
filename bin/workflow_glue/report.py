@@ -20,17 +20,7 @@ from si_prefix import si_format
 from workflow_glue.util import get_named_logger, wf_parser  # noqa: ABS101
 
 
-def _format_dataframes(
-    dataframe,
-    base_columns,
-    thousand_sep_columns=[
-        "Read count",
-        "Min length",
-        "Mean length",
-        "Max length",
-        "N50",
-    ],
-):
+def _format_dataframes(dataframe, base_columns, thousand_sep_columns=None):
     """Format columns in the dataframe before adding to report.
 
     `base_columns` are formatted to strings with a human readable SI prefix
@@ -40,11 +30,15 @@ def _format_dataframes(
     Both columns parameters are optional. If both are set to None, an unaltered
     dataframe is returned.
     """
+    if thousand_sep_columns is None:
+        thousand_sep_columns = [
+            'Read count', 'Min length', 'Mean length', 'Max length', 'N50']
+
     if base_columns:
         dataframe[base_columns] = dataframe[base_columns].apply(
             lambda bases: f"{si_format(bases, precision=2)}B"
         )
-    # Add thousands separator
+
     if thousand_sep_columns:
         dataframe[thousand_sep_columns] = dataframe[thousand_sep_columns].apply(
             lambda x: x.apply(lambda y: f"{y:,.0f}")
