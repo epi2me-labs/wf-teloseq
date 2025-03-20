@@ -6,11 +6,13 @@ Hits every function, description of test data in tests/static.
 from pathlib import Path
 from unittest.mock import Mock
 
+import numpy as np
 import pysam
 import pytest
 from workflow_glue.process_alignments import (
     determine_haplotype,
     main,
+    mean_quality
 )
 
 
@@ -32,6 +34,23 @@ TEST_BAM = SCRIPT_DIR / "static" / "test_ref_reads.bam"
 def test_assign_haplotype(ref, expected):
     """Test high tech haplotype assignment."""
     assert determine_haplotype(ref) == expected
+
+
+# If this didn't would I would quit and open a patisserie
+def test_mean_quality():
+    """Test mean quality calculation."""
+    # return tag value if present
+    record = Mock()
+    record.get_tag = Mock(return_value=5)
+    assert mean_quality(record) == 5
+
+    # redo calculation if tag not present
+    record = Mock()
+    record.get_tag = Mock(side_effect=KeyError('qs'))
+    record.query_qualities = [10, 20, 30, 40, 50]
+    assert np.isnan(mean_quality(record, trim=10))  # trimmed away
+    assert np.isclose(mean_quality(record, trim=0), 16.5321, atol=0.001)  # all
+    assert np.isclose(mean_quality(record, trim=3), 42.5963, atol=0.001)  # 40, 50
 
 
 @pytest.fixture

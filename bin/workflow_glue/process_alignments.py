@@ -14,6 +14,10 @@ from .util import get_named_logger, wf_parser  # noqa: ABS101,E501
 NOT_GOOD_PRIMARY = (
         pysam.FUNMAP | pysam.FSECONDARY | pysam.FQCFAIL | pysam.FSUPPLEMENTARY)
 
+QUAL_TO_PROB = np.fromiter(
+    (10 ** (-q / 10) for q in range(0, 100)),
+    dtype=np.float64, count=100)
+
 
 def determine_haplotype(ref):
     """Determine the haplotype of a given reference. High tech."""
@@ -53,6 +57,30 @@ def get_tag_with_default(record, tag, default=None):
         return record.get_tag(tag)
     except KeyError:
         return default
+
+
+def mean_quality(record, trim=60):
+    """Calculate the mean quality of a read.
+
+    :param trim: number of quality scores to trim from the start of the read,
+        the default is to be equivalent to dorado.
+    """
+    try:
+        qual = record.get_tag("qs")
+    except KeyError:
+        if record.query_qualities is None:
+            return np.nan
+    else:
+        return qual
+
+    probs = np.fromiter(
+        (QUAL_TO_PROB[q] for q in record.query_qualities),
+        dtype=np.float64, count=len(record.query_qualities))
+    try:
+        probs = probs[trim:]
+    except IndexError:
+        return np.nan
+    return -10 * np.log10(np.mean(probs))
 
 
 def main(args):
@@ -95,9 +123,7 @@ def main(args):
                     record.get_tag("HP"),
                     1 - get_tag_with_default(record, "de", 1),
                     record.get_tag("qc"),
-                    np.median(record.query_qualities)
-                    if record.query_qualities
-                    else np.nan,
+                    mean_quality(record),
                     analyse
                 )
             )
