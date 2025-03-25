@@ -160,7 +160,7 @@ input_reads.fastq   ─── input_directory  ─── input_directory
 | Nextflow parameter name  | Type | Description | Help | Default |
 |--------------------------|------|-------------|------|---------|
 | skip_mapping | boolean | Perform alignment to assign haplotypes to telomeric reads. | Use `--skip_mapping` if there is no suitable reference available. Only a bulk estimate of telomere lengths per sample will be calculated. | False |
-| alignment_threads | integer | Set max number of threads to use for alignment. |  | 8 |
+| alignment_threads | integer | Set max number of threads to use for alignment. |  | 6 |
 
 
 ### Output Options

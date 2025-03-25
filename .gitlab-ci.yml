@@ -27,6 +27,7 @@ docker-run:
           "missing_reference",
           "sample_sheet_same",
           "sample_sheet_diff",
+          "one_invalid_sample"
         ]
   # TODO Add in trim and barcode specific tests to check that is passed through
   rules:
@@ -37,21 +38,15 @@ docker-run:
       when: never
     - if: $MATRIX_NAME == "defaults"
       variables:
-        NF_IGNORE_PROCESSES: coverage_calc
     - if: $MATRIX_NAME == "bam_in"
       variables:
         NF_WORKFLOW_OPTS: "--bam test_data/samples/ --alignment_threads 2"
-        NF_IGNORE_PROCESSES: coverage_calc
     - if: $MATRIX_NAME == "skip_mapping"
       variables:
         NF_WORKFLOW_OPTS: "--fastq test_data/HG002_small_test.fastq.gz --skip_mapping"
-        NF_IGNORE_PROCESSES: coverage_calc
     - if: $MATRIX_NAME == "non_telomeric_reads"
       variables:
         NF_WORKFLOW_OPTS: "--bam test_data/non_telomeric_1000.bam"
-        NF_IGNORE_PROCESSES: coverage_calc
-        ASSERT_NEXTFLOW_FAILURE: "yes"
-        ASSERT_NEXTFLOW_FAILURE_REXP: "No valid samples found. Exiting workflow."
     - if: $MATRIX_NAME == "missing_reference"
       variables:
         NF_WORKFLOW_OPTS: "--fastq test_data/HG002_small_test.fastq.gz --reference im_not_here.fasta.gz --alignment_threads 2"
@@ -59,8 +54,9 @@ docker-run:
     - if: $MATRIX_NAME == "sample_sheet_same"
       variables:
         NF_WORKFLOW_OPTS: "--bam test_data/samples --sample_sheet test_data/sample_sheet_same_ref.csv --alignment_threads 2"
-        NF_IGNORE_PROCESSES: coverage_calc
     - if: $MATRIX_NAME == "sample_sheet_diff"
       variables:
         NF_WORKFLOW_OPTS: "--bam test_data/samples --sample_sheet test_data/sample_sheet_different_ref.csv --alignment_threads 2"
-        NF_IGNORE_PROCESSES: coverage_calc  
+    - if: $MATRIX_NAME == "one_invalid_sample"
+      variables:
+        NF_WORKFLOW_OPTS: "--bam test_data/samples_one_invalid --sample_sheet test_data/sample_sheet_different_ref.csv --alignment_threads 2"  

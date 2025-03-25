@@ -153,26 +153,36 @@ def main(args):
     )
     boxplot_data = boxplot_data.loc[natsort.natsorted(boxplot_data.index)]
     boxplot_data.to_csv(args.boxplot_tsv_name, sep="\t")
-
+    # Compute summary stats for all data
     summary_data = ts_utils.process_telomere_stats(df_good_reads["telomere_length"])
-    summary_data["Sample"] = args.sample
+    if summary_data is not None:
+        summary_data["Sample"] = args.sample
+    else:
+        summary_data = pd.DataFrame([])
     summary_data.to_csv(
         args.summary_tsv_name, index=False, sep="\t",
         float_format="%.2f"
     )
 
+    # Compute summary stats for per contig data.
     per_contig_summary_df = df_good_reads.groupby(
         "reference_name", as_index=False
     )["telomere_length"].apply(ts_utils.process_telomere_stats)
-    per_contig_summary_df.rename(
-        columns={"reference_name": "Contig name"}, inplace=True
-    )
-    per_contig_summary_df.sort_values(
-        "Contig name", inplace=True, key=natsort.natsort_key
-    )
-    per_contig_summary_df.to_csv(args.contig_summary_tsv_name, index=False, sep="\t")
+    # Handle case where there are no stats
+    if per_contig_summary_df.empty:
+        pd.DataFrame([]).to_csv(args.contig_summary_tsv_name, index=False, sep="\t")
+    else:
+        per_contig_summary_df.rename(
+            columns={"reference_name": "Contig name"}, inplace=True
+        )
+        per_contig_summary_df.sort_values(
+            "Contig name", inplace=True, key=natsort.natsort_key
+        )
+        per_contig_summary_df.to_csv(
+            args.contig_summary_tsv_name, index=False, sep="\t"
+        )
 
-    # QC modes for reads
+    # QC modes for reads - what about if there is no data
     qc_df = df.set_index("read_id")
     qc_df = (
         qc_df.loc[qc_df.index.drop_duplicates()]

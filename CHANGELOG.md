@@ -8,9 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Addition of reference to meta data allows for use of different references per sample via --sample_sheet option and use of the same keys throughout pipeline.
 - New tags for telomere boundary, quality control outcomes and haplotype for each read.
+- `--alignment_threads` parameter to control the number of threads used by minimap2. Defaults to 6.
 
 ### Changed
-- The filtering the input data has been refactored, and boundary detection has been altered. This has removed several processes, collapsing them all down into one.
+- The filtering of the input data has been refactored, and boundary detection has been altered. This has removed several processes, collapsing them all down into one.
 - Added custom script for boundary detection, which detects the coordinate of large shifts in the density of telomeric repeats.
 - The alignment process has had it's maximum memory directive raised to 7Gb from 2Gb. We were seeing some occurrences of the process being killed for exceeding the memory cap on larger datasets when using higher thread counts.
 - Documentation has been updated and rewritten.
@@ -19,6 +20,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 - Removed the "de novo" guided route.
 - Removed the Greider telomere boundary detection code.
+
+### Fixed
+- Pipeline now correctly handles empty input files in a multi sample run. Samples with no input will be filtered out, and a warning will be logging per sample removed.
+- Samples with no good telomere data will be carried through the workflow, and correctly tagged. The report will contain basic statistics about the sample, but all telomere related stats and plots will contain explainers that there was no data.
 
 ## [v0.0.4]
 ### Changed
