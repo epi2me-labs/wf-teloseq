@@ -5,7 +5,6 @@ include { fastq_ingress; xam_ingress } from './lib/ingress'
 include { getParams } from './lib/common'
 
 include { align_and_process } from './modules/local/alignment'
-include { collectFilesInDir } from './modules/local/common'
 include { process_reads } from './modules/local/preprocess'
 
 process getVersions {
@@ -40,7 +39,11 @@ process makeReport {
         val meta_array
         path "versions/*"
         path "params.json"
-        path "data/*"
+        path unaligned_stats, stageAs: "unaligned_stats/*"
+        path fastcat_stats, stageAs: "fastcat_stats/sample_*"
+        path qc_stats, stageAs: "qc_stats/sample*/*"
+        path contig_stats, stageAs: "contig_stats/sample*/*"
+        path boxplot_stats, stageAs: "boxplot_stats/sample*/*"
     output:
         path "wf-teloseq-*.html"
     script:
@@ -57,14 +60,19 @@ process makeReport {
             ]
         }
         def json_str = new groovy.json.JsonBuilder(simplified_meta).toPrettyString()
+
         """
         echo '${json_str}' > metadata.json
-
         workflow-glue report $report_name \\
             --metadata metadata.json \\
             --versions versions \\
             --params params.json \\
-            --workflow-version v${workflow.manifest.version}
+            --workflow-version v${workflow.manifest.version} \\
+            --unaligned-stats-dir unaligned_stats \\
+            --fastcat-stats fastcat_stats \\
+            --qc-stats-dir qc_stats \\
+            --contig-stats-dir contig_stats \\
+            --boxplot-stats-dir boxplot_stats
         """
 }
 
@@ -78,6 +86,14 @@ workflow generic_preprocessing {
         filtered_samples = process_reads(samples)
 
         valid_samples_with_stats = filtered_samples
+            .map { meta, sub_telomeric_fastq_file, _length_sum, _stats_dir ->
+                if (sub_telomeric_fastq_file.size() == 0) {
+                     log.warn "SAMPLE: ${meta.alias} contains no valid sequences, removed from analysis..."
+                }
+                else {
+                    [meta, sub_telomeric_fastq_file, _length_sum, _stats_dir]
+                }
+            }
             .filter { _meta, sub_telomeric_fastq_file, _length_sum, _stats_dir ->
                 sub_telomeric_fastq_file.size() > 0
             }
@@ -86,7 +102,6 @@ workflow generic_preprocessing {
             }
 
     emit:
-        metadata = valid_samples_with_stats.map { items -> items[0] }.collect()
         valid_samples_with_stats
 }
 
@@ -96,14 +111,16 @@ workflow pipeline {
         samples
 
     main:
+
+        def OPTIONAL_FILE = file("$projectDir/data/OPTIONAL_FILE")
+
         // Get the workflow_params and software versions for report.
         workflow_params = getParams()
         software_versions = getVersions()
 
         preprocessing = generic_preprocessing(samples)
         
-        // Extract outputs from preprocessing
-        metadata = preprocessing.metadata
+        // Extract output from preprocessing
         per_sample_stats = preprocessing.valid_samples_with_stats
 
         if (!params.skip_mapping) {
@@ -121,24 +138,56 @@ workflow pipeline {
             })
             analysis_files_for_collection = aligned_outputs.alignment_stats
         } else {
-            analysis_files_for_collection = per_sample_stats
-        }
-        // Collect files in a working dir, so they can be used in the final report generation 
-        results_for_report = analysis_files_for_collection
-            | map { items ->
-                def meta = items[0]
-                // The fastcat and preprocessing stats files are nested, so flatten them out
-                def stats_files = items[1..-1].flatten()
-                [meta, stats_files, meta.alias]
+            // map to get only stats files out -> matches to alignment output
+            analysis_files_for_collection = per_sample_stats.map{ meta, _sub_telomeric_fastq_file, length_sum, stats_dir -> 
+                [meta, length_sum, stats_dir]
             }
-            | collectFilesInDir
-            | map { _meta, dirname -> dirname }
+        }
+        // Sort files from output tuple into individual channels so they can be collected and staged in report working directory.
+        // We use the whole `items` tuple as we don't know how many files are contained.
+        // If alignment is performed it will contain extra stats files.
+        // Finally, we use the order of samples in the collected metadata_ch to match up to the order of the fastcat_stats directories staged in `makeReport`.
+        (
+            metadata_ch,
+            unaligned_ch,
+            fastcat_stats_ch,
+            boxplot_stats_ch,
+            qc_stats_ch,
+            contig_stats_ch
+        ) = analysis_files_for_collection.multiMap { items ->
+            def meta = items[0]
+
+            // The fastcat and preprocessing stats files are nested, so flatten everything out
+            def stats_files = items[1..-1].flatten()
+            // These files are only output if alignment is performed, set a default.
+            def boxplot_stats = OPTIONAL_FILE
+            def qc_stats = OPTIONAL_FILE
+            def contig_summary_stats = OPTIONAL_FILE
+            //  Alignment was performed, set stats files paths for report.
+            if (!params.skip_mapping) {
+                  boxplot_stats = stats_files[3]
+                  qc_stats = stats_files[4]
+                  contig_summary_stats = stats_files[5]
+            }
+
+            // Return file elements
+            metadata_ch: meta
+            unaligned_stats_ch: stats_files[0]
+            fastcat_stats_ch: stats_files[1]
+            boxplot_stats_ch: boxplot_stats
+            qc_stats_ch: qc_stats
+            contig_summary_stats_ch: contig_summary_stats
+        }
 
         makeReport(
-            metadata,
+            metadata_ch | collect,
             software_versions,
             workflow_params,
-            results_for_report | collect,
+            unaligned_ch | collect,
+            fastcat_stats_ch | collect,
+            qc_stats_ch | collect,
+            contig_stats_ch | collect,
+            boxplot_stats_ch | collect
         )
 
 }

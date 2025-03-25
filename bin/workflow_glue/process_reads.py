@@ -281,13 +281,24 @@ def main(args):
 
     # Write the summary metrics out for use in report.
     summary_data = ts_utils.process_telomere_stats(pd.Series(boundaries))
-    summary_data.insert(0, "Sample", args.sample)
     if summary_data is not None:
+        summary_data.insert(0, "Sample", args.sample)
         summary_data.to_csv(
             args.summary_tsv_name,
             index=False, sep="\t",
             float_format="%.2f",
         )
+    else:
+        # No reads passed filtering, so to include in final report table
+        # We write out a TSV which indicates that.
+        pd.DataFrame([(args.sample, 0, 0, 0, 0, 0)]).to_csv(
+            args.summary_tsv_name, sep="\t", index=False,
+            header=[
+                "Sample", "Read count", "Min length",
+                "Mean length", "Max length", "CV"
+            ]
+        )
+
     # Emit a short summary to stderr
     pretty_str = ", ".join(
         f"{key.name}: {value}" for key, value in boundary_result_count.items()

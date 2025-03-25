@@ -87,7 +87,7 @@
                 },
                 "alignment_threads": {
                     "type": "integer",
-                    "default": 8,
+                    "default": 6,
                     "description": "Set max number of threads to use for alignment."
                 }
             }
