@@ -35,10 +35,12 @@ def test_calculate_cv_invalid(array):
 
 
 @pytest.mark.parametrize(
-    "series, expected_read_count, expected_min, expected_mean, expected_max, expected_cv",  # noqa: E501
+    "series, expected_read_count, expected_min, expected_q1, expected_median, expected_q3, expected_max, expected_cv",  # noqa: E501
     [
         (
             pd.Series([], dtype=float),
+            None,
+            None,
             None,
             None,
             None,
@@ -49,7 +51,9 @@ def test_calculate_cv_invalid(array):
             pd.Series([100, 200, 300, 400, 500]),
             5,  # Read count
             100,  # Min length
-            300,  # Mean length
+            200,  # Q1
+            300,  # Median length
+            400,  # Q3
             500,  # Max length
             round(calculate_cv(np.array([100, 200, 300, 400, 500])), 2),  # CV
         ),  # Normal case
@@ -57,7 +61,9 @@ def test_calculate_cv_invalid(array):
             pd.Series([150]),
             1,  # Read count
             150,  # Min length
-            150,  # Mean length
+            150,  # Q1
+            150,  # Median length
+            150,  # Q3
             150,  # Max length
             0.0,  # CV (should be 0 for single value)
         ),
@@ -65,7 +71,9 @@ def test_calculate_cv_invalid(array):
             pd.Series([200, 200, 200, 200, 200]),
             5,  # Read count
             200,  # Min length
-            200,  # Mean length
+            200,  # Q1
+            200,  # Median length
+            200,  # Q3
             200,  # Max length
             0.0,  # CV (should be 0 for identical values)
         ),
@@ -75,7 +83,9 @@ def test_process_telomere_stats(
     series,
     expected_read_count,
     expected_min,
-    expected_mean,
+    expected_q1,
+    expected_median,
+    expected_q3,
     expected_max,
     expected_cv,
 ):
@@ -90,7 +100,11 @@ def test_process_telomere_stats(
             "Read count incorrect"
         )
         assert result["Min length"].iloc[0] == expected_min, "Min length incorrect"
-        assert result["Mean length"].iloc[0] == expected_mean, "Mean length incorrect"
+        assert result["Q1"].iloc[0] == expected_q1, "Q1 incorrect"
+        assert result["Median length"].iloc[0] == expected_median, (
+            "Mean length incorrect"
+        )
+        assert result["Q3"].iloc[0] == expected_q3, "Q3 incorrect"
         assert result["Max length"].iloc[0] == expected_max, "Max length incorrect"
         assert np.isclose(result["CV"].iloc[0], expected_cv, equal_nan=True), (
             "CV incorrect"

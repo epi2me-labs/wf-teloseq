@@ -1,5 +1,7 @@
 """Shared code for teloseq wf-glue."""
 
+from functools import partial
+
 import numpy as np
 import pandas as pd
 
@@ -37,11 +39,15 @@ def process_telomere_stats(series):
     if series.empty:
         return None
 
+    # Create partial functions for each quartile
+    q1 = partial(np.percentile, q=25)
+    q3 = partial(np.percentile, q=75)
+
     # Define aggregation functions
     agg_functions = {
         "Read count": "size",
         "Min length": "min",
-        "Mean length": "mean",
+        "Median length": "median",
         "Max length": "max",
     }
 
@@ -51,6 +57,8 @@ def process_telomere_stats(series):
     # so run separately
     # See https://stackoverflow.com/questions/68091853/python-cannot-perform-both-aggregation-and-transformation-operations-simultaneo  # noqa: E501
     summary_stats["CV"] = calculate_cv(series.values)
+    summary_stats["Q1"] = q1(series.values)
+    summary_stats["Q3"] = q3(series.values)
     summary_df = summary_stats.to_frame().T
     # Round to human friendly DP
     summary_df = summary_df.round({"CV": 2})
@@ -58,9 +66,21 @@ def process_telomere_stats(series):
     int_fields = [
         "Read count",
         "Min length",
-        "Mean length",
+        "Q1",
+        "Median length",
+        "Q3",
         "Max length",
     ]
+    column_order = [
+        "Read count",
+        "Min length",
+        "Q1",
+        "Median length",
+        "Q3",
+        "Max length",
+        "CV"
+    ]
+    summary_df = summary_df[column_order]
     summary_df[int_fields] = (
         summary_df[int_fields]
         .apply(pd.to_numeric, errors="coerce")

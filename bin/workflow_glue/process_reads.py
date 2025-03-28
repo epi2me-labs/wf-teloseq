@@ -291,11 +291,11 @@ def main(args):
     else:
         # No reads passed filtering, so to include in final report table
         # We write out a TSV which indicates that.
-        pd.DataFrame([(args.sample, 0, 0, 0, 0, 0)]).to_csv(
+        pd.DataFrame([(args.sample, 0, 0, 0, 0, 0, 0, 0)]).to_csv(
             args.summary_tsv_name, sep="\t", index=False,
             header=[
-                "Sample", "Read count", "Min length",
-                "Mean length", "Max length", "CV"
+                "Sample", "Read count", "Min length", "Q1",
+                "Median length", "Q3", "Max length", "CV"
             ]
         )
 
