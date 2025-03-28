@@ -21,7 +21,7 @@ from workflow_glue.util import get_named_logger, wf_parser  # noqa: ABS101
 def _format_dataframes(
     dataframe,
     base_columns=None,
-    thousand_sep_columns=["Read count", "Min length", "Mean length", "Max length"],
+    thousand_sep_columns=["Read count", "Min length", "Q1", "Median length", "Q3", "Max length"],  # noqa: E501
 ):
     """Format columns in the dataframe before adding to report.
 
