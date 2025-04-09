@@ -16,6 +16,7 @@ from workflow_glue.process_reads import (
     TELOMERE_MOTIF,
     trim_adapters,
 )
+random.seed(0)
 
 SCRIPT_DIR = script_dir = Path(__file__).parent
 TEST_BAM = SCRIPT_DIR / "static" / "test_telomere_boundary.bam"
@@ -123,33 +124,53 @@ def random_dna(length):
     return "".join(random.choices("ACGT", k=length))
 
 
+def mutate_barcode(sequence, n_mutations):
+    """Mutate the barcode, for testing edlib alignment."""
+    mutate_points = (3, 7, 9, 11)
+    mutated_barcode = list(sequence)
+    for i in range(n_mutations):
+        char = mutated_barcode[mutate_points[i]]
+        mutated_barcode[mutate_points[i]] = "T" if char != "T" else "A"
+    return "".join(mutated_barcode)
+
+
 # Define test sequences with embedded barcodes
 BARCODES = ["AGCTTAGCTTAGCTTAGCTT", "CGTACGTACGTACGTACGTA"]
 SEQUENCES = [
     random_dna(100) + barcode + random_dna(200)  # Barcode after 200 bases
     for barcode in BARCODES * 2  # Generate 4 sequences
 ]
-QUALITY_STRS = ["I" * len(seq) for seq in SEQUENCES]  #
+# Barcode just outside prefix
+BARCODE_AFTER_PREFIX = f"{random_dna(201)}{BARCODES[0]}{random_dna(100)}"
+# Barcode with 2 mismatches within first 200bp, should match
+BARCODE_MISMATCH_2 = f"{random_dna(100)}{mutate_barcode(BARCODES[0], 2)}{random_dna(200)}"  # noqa: E501
+# Barcode with 4 mismatches within first 200bp, shouldn't match
+BARCODE_MISMATCH_4 = f"{random_dna(100)}{mutate_barcode(BARCODES[0], 4)}{random_dna(200)}"  # noqa: E501
 
 
 @pytest.mark.parametrize(
-    "sequence, quality_str, adapters, prefix, max_errors, expected_trim, expected_length",  # noqa: E501
+    "sequence, adapters, prefix, max_errors, expected_trim, expected_length",
     [
-        (SEQUENCES[i], QUALITY_STRS[i], BARCODES, 200, 3, True, 200)
-        for i in range(len(SEQUENCES))  # Expect this to be 200 bases long
-    ]
-    + [
-        (SEQUENCES[i], QUALITY_STRS[i], ["TGCATGCATGCATGCATGCA"], 200, 3, False, None)
-        for i in range(len(SEQUENCES))  # Wrong barcode, should be full length
+        # Exact barcode matches
+        *[(SEQUENCES[i], BARCODES, 200, 3, True, 200) for
+          i in range(4)],
+        # Barcode outside prefix — should not match
+        (BARCODE_AFTER_PREFIX, BARCODES, 200, 3, False, None),
+        # Barcode with 2 mismatches — still within error tolerance
+        (BARCODE_MISMATCH_2, BARCODES, 200, 3, True, 200),
+        # Barcode with 4 mismatches — should not trim (max errors is 3)
+        (BARCODE_MISMATCH_4, BARCODES, 200, 3, False, None),
+        # No barcode match and no telomere motif match — should not trim
+        (SEQUENCES[0], ["TTTTTTTTTTTTTTTTTT"], 200, 3, False, None),
     ],
 )
 def test_trim_adapters(
-    sequence, quality_str, adapters, prefix, max_errors, expected_trim, expected_length
+    sequence, adapters, prefix, max_errors, expected_trim, expected_length
 ):
     """Test that mock reads have the adapter and barcode correctly trimmed."""
     record = Mock()
     record.query_sequence = sequence
-    record.query_qualities = quality_str
+    record.query_qualities = "I" * len(sequence)
     record = trim_adapters(record, adapters, prefix, max_errors)
     trimmed_seq, trimmed_qual = record.query_sequence, record.query_qualities
     if expected_trim:
@@ -162,7 +183,31 @@ def test_trim_adapters(
 
     else:
         assert trimmed_seq == sequence, "Sequence should remain unchanged"
-        assert trimmed_qual == quality_str, "Quality scores should remain unchanged"
+        assert trimmed_qual == "I" * len(sequence), "Quality scores should remain unchanged"  # noqa: E501
+
+
+def test_trim_adapters_telomere_fallback():
+    """Test trimming when barcode is absent but telomere motif is found."""
+    # Telomere motif appears at position 50-56 (HW alignment), within prefix
+    # We don't actually trim out the motif
+    telomere_motif = "CCTAACC"
+    sequence = "A" * 50 + telomere_motif + "G" * 250
+    quality_str = "I" * len(sequence)
+
+    record = Mock()
+    record.query_sequence = sequence
+    record.query_qualities = quality_str
+
+    result = trim_adapters(
+        record,
+        adapters=["TTTTTTTTTTTTTTTTTT"],
+        prefix=200,
+        max_errors=3
+    )
+    expected_trim_position = 50  # start location of motif
+
+    assert result.query_sequence == sequence[expected_trim_position:]
+    assert result.query_qualities == quality_str[expected_trim_position:]
 
 
 def test_main(capsys, tmp_path):

@@ -176,7 +176,10 @@ def largest_error_cluster(sequence, last_position, distance=500):
     return np.max(counts)
 
 
-def trim_adapters(record, adapters, prefix=200, max_errors=3):
+def trim_adapters(
+    record, adapters, prefix=200,
+    max_errors=3, fallback_errors=1, adapter_motif="CCTAACC"
+):
     """Trim adapters and barcode from read, updating qualities length as well.
 
     Doesn't trim if there is no barcode match.
@@ -188,6 +191,13 @@ def trim_adapters(record, adapters, prefix=200, max_errors=3):
         if hits["editDistance"] <= max_errors:
             trim = hits["locations"][0][1] + 1
             break  # exceedingly unlikely to have multiple hits
+    # if we didn't find a barcode, we will trim up to the
+    # first telomere motif, allowing up to `fallback_error` mismatches
+    else:
+        hits = edlib.align(adapter_motif, seq_, mode="HW", task="path")
+        # Short sequence, default of 1 mismatch
+        if hits["editDistance"] <= fallback_errors:
+            trim = hits["locations"][0][0]
     if trim is not None:
         trimmed_quals = record.query_qualities[trim:]
         record.query_sequence = record.query_sequence[trim:]
