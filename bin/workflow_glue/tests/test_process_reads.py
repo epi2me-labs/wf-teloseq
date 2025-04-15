@@ -41,10 +41,10 @@ def records(bam_file):
 @pytest.mark.parametrize(
     "query_name, expected_boundary, expected_class",
     [
-        ("0f88584f-bfd2-4b5c-9a19-5ef2402a54bf", 4262, BoundaryFinder.Good),
-        ("b4470370-96c3-41ab-b1e6-11ba396c5524", 3783, BoundaryFinder.Good),
-        ("a03facf6-9418-4d92-b0f1-7550c1569f38", 1827, BoundaryFinder.Good),
+        ("0f88584f-bfd2-4b5c-9a19-5ef2402a54bf", 4295, BoundaryFinder.Good),
+        ("b4470370-96c3-41ab-b1e6-11ba396c5524", 3789, BoundaryFinder.Good),
         ("b8090f53-643c-48b2-bc74-30a2d233e9a7", 2510, BoundaryFinder.Good),
+        ("a03facf6-9418-4d92-b0f1-7550c1569f38", None, BoundaryFinder.TelomericOnly),
         (
             "62726334-0660-4759-a7d2-b30c966fc098",
             None,
@@ -238,11 +238,12 @@ def test_main(capsys, tmp_path):
     args.skip_trimming = False
     args.max_errors = 5
     args.error_distance = 500
+    args.post_boundary_ccc_threshold = 0.25
 
     # Run main function
     main(args)
     captured = capsys.readouterr()
     # Added a read that gets trimmed:
     assert "Skipping read d89f9da1-cc54-414e-b014-e1fcb053cd4b, as it has no sequence left" in captured.err  # noqa: E501
-    assert "TooShort: 3, TooFewRepeats: 1, LowQuality: 5, StartNotRepeats: 2, Good: 3, TooErrorful: 2, TooCloseToEnd: 1" in captured.err  # noqa: E501
+    assert "TooShort: 3, TooFewRepeats: 1, LowQuality: 5, StartNotRepeats: 1, Good: 4, TelomericOnly: 1, TooCloseToEnd: 1, TooErrorful: 1" in captured.err  # noqa: E501
     assert summary_tsv.exists()

@@ -25,6 +25,19 @@ from .util import wf_parser  # noqa: ABS101
 # of the usual TTAGGG
 TELOMERE_MOTIF = "TAACCC"
 
+# Known telomeric variants to catch
+VARIANT_MOTIFS = {
+    "CACCCT",
+    "ACCCCT",
+    "CCCAAA",
+    "CCCCGA",
+    "CCCTGA",
+    "CCCTCA",
+    "CCCTAC",
+    "CCCTAT",
+}
+
+
 # known pathological error motifs
 ERROR_MOTIFS = {
     "GTATAG",
@@ -69,8 +82,18 @@ BARCODES = [
 BARCODES = [bc + "CCTAACC" for bc in BARCODES]
 
 # I am likely to try and break this, so check that the tag is valid SAM format
-# lower case is not reserved by SAM
+# NB. lower case is not reserved by SAM
 SAM_TAG_REGEX = re.compile(r"^[a-zA-Z]{2}:[AifZHB]:.+$")
+
+# Compile regex to detect any known telomeric repeats in a read
+TELOMERE_MOTIF_REGEX = re.compile(
+    r"(" + "|".join(VARIANT_MOTIFS.union({TELOMERE_MOTIF})) + ")"
+)
+
+# CCC only motif
+CCC_REGEX = re.compile(
+    r"CCC"
+)
 
 
 class BoundaryFinder(enum.Enum):
@@ -91,12 +114,21 @@ class BoundaryFinder(enum.Enum):
     TooErrorful = "TooErrorful"
     # Basecalls after boundary have low Q score
     LowQuality = "LowSubTeloQual"
+    # Sequence after boundary is rich in CCC, so is likely just extra telomere
+    TelomericOnly = "TelomereOnly"
 
 
 def find_telo_boundary(
-        record, motif, filter_width=8, min_repeats=20, start_window=0.3,
-        start_repeats=0.8, min_qual_non_telo=9):
-    """Find telomere boundary in the provided read, or None if read fails checks.
+    record,
+    motif,
+    filter_width=8,
+    min_repeats=20,
+    start_window=0.3,
+    start_repeats=0.8,
+    min_qual_non_telo=9,
+    post_boundary_ccc_threshold=0.25
+):
+    """Identify telomere boundary in the provided read, or None if read fails checks.
 
     :return: The detected telomere boundary position and classification status.
     :rtype: tuple[int | None, BoundaryFinder]
@@ -104,7 +136,7 @@ def find_telo_boundary(
     # find motif
     motifs = np.zeros(len(record.query_sequence), dtype=int)
     matches = 0
-    for match in re.finditer(motif, record.query_sequence):
+    for match in TELOMERE_MOTIF_REGEX.finditer(record.query_sequence):
         matches += 1
         motifs[match.start(): match.end()] = 1
 
@@ -144,12 +176,23 @@ def find_telo_boundary(
     if len(record.query_sequence) - boundary < width:
         return None, BoundaryFinder.TooCloseToEnd
 
-    # if theres a low quality region after the telomere region,
-    # thats likely the basecaller when down the wrong track
+    # if there's a low quality region after the telomere region,
+    # it's likely the basecaller went down the wrong track
     # and we've misidentified the boundary
     if quals := record.query_qualities:  # as we process references too
         if np.median(quals[boundary:]) < min_qual_non_telo:
             return None, BoundaryFinder.LowQuality
+
+    # Check for CCC-rich motifs in post-boundary region
+    post_seq = record.query_sequence[boundary:]
+    # 3 base motif, so sum 3
+    ccc_count = sum(3 for _ in CCC_REGEX.finditer(post_seq))
+    ccc_proportion = ccc_count / len(post_seq)
+    # If the sequence after the boundary is composed of more than
+    # `post_boundary_CCC_threshold` CCC motifs, we deem it likely to be
+    # just more telomere, so we tag it to be filtered out
+    if ccc_proportion > post_boundary_ccc_threshold:
+        return None, BoundaryFinder.TelomericOnly
 
     return boundary, BoundaryFinder.Good
 
@@ -257,6 +300,7 @@ def main(args):
                 start_window=args.start_window,
                 start_repeats=args.start_repeats,
                 min_qual_non_telo=args.min_qual_non_telo,
+                post_boundary_ccc_threshold=args.post_boundary_ccc_threshold
             )
 
             if boundary is not None:
@@ -295,7 +339,8 @@ def main(args):
         summary_data.insert(0, "Sample", args.sample)
         summary_data.to_csv(
             args.summary_tsv_name,
-            index=False, sep="\t",
+            index=False,
+            sep="\t",
             float_format="%.2f",
         )
     else:
@@ -304,9 +349,15 @@ def main(args):
         pd.DataFrame([(args.sample, 0, 0, 0, 0, 0, 0, 0)]).to_csv(
             args.summary_tsv_name, sep="\t", index=False,
             header=[
-                "Sample", "Read count", "Min length", "Q1",
-                "Median length", "Q3", "Max length", "CV"
-            ]
+                "Sample",
+                "Read count",
+                "Min length",
+                "Q1",
+                "Median length",
+                "Q3",
+                "Max length",
+                "CV",
+            ],
         )
 
     # Emit a short summary to stderr
@@ -319,15 +370,9 @@ def main(args):
 def argparser():
     """Argument parser for entry point."""
     parser = wf_parser("ProReads")
-    parser.add_argument(
-        "sample", type=str, help="Sample name."
-    )
-    parser.add_argument(
-        "input_bam",  help="Input BAM file. Use - for stdin."
-    )
-    parser.add_argument(
-        "--output-bam", default=sys.stdout, help="Output BAM file."
-    )
+    parser.add_argument("sample", help="Sample name.")
+    parser.add_argument("input_bam", help="Input BAM file. Use - for stdin.")
+    parser.add_argument("--output-bam", default=sys.stdout, help="Output BAM file.")
     parser.add_argument(
         "--summary-tsv-name", type=Path, default="unaligned_summary_stats.tsv",
         help="Name of stats TSV file to output.",
@@ -345,6 +390,11 @@ def argparser():
     grp.add_argument(
         "--min-qual-non-telo", type=int, default=9,
         help="Minimum median qscore of non-telomeric region.",
+    )
+    grp.add_argument(
+        "--post_boundary_ccc_threshold", type=float, default=0.25,
+        help="Maximum threshold for proportion of post telomere boundary read"
+        " that is composed of CCC motifs.",
     )
     grp.add_argument(
         "--barcode", type=int, default=None,

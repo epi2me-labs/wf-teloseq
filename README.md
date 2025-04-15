@@ -237,7 +237,8 @@ Reads which pass all filtering checks are tagged with `qc:Z:Good`.
 | **Start Not Repeats** | The first 30% of the read is not 80% repeats. Read is excluded from further analysis, is tagged as failing QC, remaining in output BAM. | StartNotRepeats |
 | **Too Close End**    | The telomeric boundary is too close (within 80 bases) of the end of the read. Read is excluded from further analysis, is tagged as failing QC, remaining in output BAM. | TooCloseEnd     |
 | **Low Sub-Telo Qual** | The mean basecall Q score of the region after the boundary is below a default value of 9. Read is excluded from further analysis, is tagged as failing QC, remaining in output BAM. | LowSubTeloQual  |
-| **Too Errorful**     | A large number of known basecall error motifs has been observed in the subtelomere. Read is excluded from further analysis, is tagged as failing QC, remaining in output BAM. | TooErrorful     |
+| **Too Errorful**     | At least 5 known basecall error motifs have been observed within a 500 base pair frame in the subtelomere. Read is excluded from further analysis, is tagged as failing QC, remaining in output BAM. | TooErrorful |
+| **Only Telomere**     | Sequence after telomere boundary is CCC rich, and so is most likely still telomere, meaning the detected boundary is unreliable. | OnlyTelomere |
 
 The following filter is only applied if alignment is performed:
 | Filter               | Description                                                                 | Tag               |
