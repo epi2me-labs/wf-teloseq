@@ -8,7 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Addition of reference to meta data allows for use of different references per sample via --sample_sheet option and use of the same keys throughout pipeline.
 - New tags for telomere boundary, quality control outcomes and haplotype for each read.
+- Quality control outcomes are listed in the workflow documentation. Added at this stage are:
+    - Too Short
+    - Too Few Repeats
+    - Start Not Repeats
+    - Too Close End
+    - Low Sub-Telo Qual
+    - Too Errorful
+    - Bad Alignment
 - `--alignment_threads` parameter to control the number of threads used by minimap2. Defaults to 6.
+- Added additional `TelomereOnly` check, which checks the composition of the post telomere boundary sequence for `CCC`. If more than 25% of the sequence is non-overlapping `CCC` kmers, the read is tagged and filtered out of further analysis.  
 
 ### Changed
 - The filtering of the input data has been refactored, and boundary detection has been altered. This has removed several processes, collapsing them all down into one.

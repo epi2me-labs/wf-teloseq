@@ -132,6 +132,7 @@ def main(args):
                                 ('StartNotRepeats', 'The first 30% of the read is < 80% repeats.'),  # noqa: E501
                                 ('TooCloseEnd', 'The telomeric boundary is too close (within 80 bases) to the read end.'),  # noqa: E501
                                 ('LowSubTeloQual', 'The mean basecall Q score of the region after the boundary is below 9.'),  # noqa: E501
+                                ('TelomereOnly', 'Sequence after boundary is rich in CCC kmers, and is likely just extra telomere after a misidentified boundary.'),  # noqa: E501
                                 ('TooErrorful', 'A large number of known basecalling error motifs have been observed in the subtelomere.'),  # noqa: E501
                                 ('BadAlign', 'A low gap-compressed identity to the reference. Only applicable to aligned reads.'),  # noqa: E501
                                 ('Good', 'Passes all filtering, and is included in final analyses of telomere lengths.')  # noqa: E501
