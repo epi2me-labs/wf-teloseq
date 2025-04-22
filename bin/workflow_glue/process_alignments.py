@@ -206,7 +206,7 @@ def main(args):
         "StartNotRepeats",
         "TooCloseEnd",
         "LowSubTeloQual",
-        "OnlyTelomere",
+        "TelomereOnly",
         "TooErrorful",
         "BadAlign",
         "Good"

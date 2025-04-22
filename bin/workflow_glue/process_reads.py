@@ -144,13 +144,6 @@ def find_telo_boundary(
     if matches < max(min_repeats, filter_width):
         return None, BoundaryFinder.TooFewRepeats
 
-    # common error is to have few repeats at the start of the read
-    # require the start of read to be composed of repeats
-    # TODO: evaluate this heuristic more
-    start = int(len(record.query_sequence) * start_window)
-    if np.sum(motifs[:start]) < start_repeats * start:
-        return None, BoundaryFinder.StartNotRepeats
-
     # make an edge filter
     width = len(motif) * filter_width
     edge_filter = np.ones(width + 1, dtype=int)
@@ -182,6 +175,14 @@ def find_telo_boundary(
     if quals := record.query_qualities:  # as we process references too
         if np.median(quals[boundary:]) < min_qual_non_telo:
             return None, BoundaryFinder.LowQuality
+
+    # common error is to have few repeats at the start of the read
+    # require the start of detected telomere repeat section to be composed
+    # of repeats
+    # TODO: evaluate this heuristic more
+    start = int(boundary * start_window)
+    if np.sum(motifs[:start]) < start_repeats * start:
+        return None, BoundaryFinder.StartNotRepeats
 
     # Check for CCC-rich motifs in post-boundary region
     post_seq = record.query_sequence[boundary:]
