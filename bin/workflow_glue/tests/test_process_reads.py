@@ -63,7 +63,7 @@ def records(bam_file):
         (
             "669ee9fa-2206-4124-9d0c-d879519f31fc",
             None,
-            BoundaryFinder.StartNotRepeats,
+            BoundaryFinder.LowQuality,
         ),
         (
             "7dbba504-6c22-4c53-8abf-6e68fd5bd8db",
@@ -72,8 +72,8 @@ def records(bam_file):
         ),
         (
             "4546cfd2-f09d-4594-af29-32a480db025c",
-            None,
-            BoundaryFinder.StartNotRepeats,
+            5018,
+            BoundaryFinder.Good,
         ),
         (
             "45a5e92c-6ee7-44a9-9b30-affa1581b645",
