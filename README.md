@@ -193,8 +193,8 @@ Output files may be aggregated including information for all samples or provided
 | Parameters from workflow | params.json | A json of all parameters selected in workflow. | aggregated |
 | Unaligned, filtered and tagged sequences. | {{alias}}/unaligned_data/{{alias}}_filtered_telomeric.fastq | These sequences have been tagged (valid SAM format tags) on whether or not they passed filtering (qc:Z), and if detected, also tagged with the Telomere repeat boundary coordinates (tl:I). | per-sample |
 | Summary metrics about detected telomere lengths within the sample. | {{alias}}/unaligned_data/{{alias}}_telomere_unaligned_metrics.tsv | Aggregated summary metrics about reads which have passed all filtering, with a detected telomere repeat boundary. | per-sample |
-| Aligned, filtered and tagged sequences. | {{alias}}/aligned_data/alignment_filtered_teloseqs.bam | Contains the sequences from the processed_fastq aligned to the provided reference. All sequences which passed initial read length (`--min_length`) and quality (`--read_quality`) filtering will be present, including unmapped. Only produced if alignment is performed. | per-sample |
-| Accompanying index for the aligned BAM. | {{alias}}/aligned_data/alignment_filtered_teloseqs.bam.csi | Coordinate-sorted index file for the aligned data BAM. | per-sample |
+| Aligned, filtered and tagged sequences. | {{alias}}/aligned_data/{{alias}}_aligned_filtered_teloseqs.bam | Contains the sequences from the processed_fastq aligned to the provided reference. All sequences which passed initial read length (`--min_length`) and quality (`--read_quality`) filtering will be present, including unmapped. Only produced if alignment is performed. | per-sample |
+| Accompanying index for the aligned BAM. | {{alias}}/aligned_data/{{alias}}_aligned_filtered_teloseqs.bam.csi | Coordinate-sorted index file for the aligned data BAM. | per-sample |
 | Summary metrics about aligned telomere lengths within the sample. | {{alias}}/aligned_data/{{alias}}_telomere_aligned_metrics.tsv | Aggregated summary metrics about detected telomere lengths within the sample, after alignment. Only reads which have primary alignments to the reference are considered. | per-sample |
 | Summary metrics about aligned telomere lengths grouped by target contig. | {{alias}}/aligned_data/{{alias}}_contig_telomere_aligned_metrics.tsv | Aggregated summary metrics about detected telomere lengths within the sample, after alignment. The reads are grouped by target contig, and only reads which have primary alignments to the reference are considered. | per-sample |
 | Summary metrics about the filtering status of each read. | {{alias}}/aligned_data/{{alias}}_qc_modes_metrics.tsv | Aggregated summary metrics of the filtering status of each read. Metrics displayed for each filtering status include count, mean Q score, length, and alignment identity (where applicable). | per-sample |
@@ -206,7 +206,7 @@ Output files may be aggregated including information for all samples or provided
 
 The workflow is composed of two steps. 
 Firstly, reads undergo initial basic length and quality control filtering, followed by analysis to determine the telomeric boundary, and filtering to remove reads where the boundary is likely incorrect.
-If alignment is enabled (default), all reads (irrespective of boundary determination) are then aligned to a reference. Reads with primary alignments with good telomere boundaries are then aggregated, before statistics about the estimated lengths of each contigs telomeresß are generated. 
+If alignment is enabled (default), all reads (irrespective of boundary determination) are then aligned to a reference. Reads with primary alignments with good telomere boundaries are then aggregated, before statistics about the estimated lengths of each contigs telomeres are generated. 
 
 ## 1. Input and Sequence preparation.
 
@@ -234,8 +234,9 @@ Reads which pass all filtering checks are tagged with `qc:Z:Good`.
 | **Minimum Q score**  | Reads with a Mean Q score <9 are discarded. Removed entirely.            | N/A              |
 | **Too Short**        | The read was too short (less than 160 bases). Read is excluded from further analysis, is tagged as failing QC, remaining in output BAM. | TooShort        |
 | **Too Few Repeats**  | There were fewer than 20 telomeric repeat motifs across the entire read. Read is excluded from further analysis, is tagged as failing QC, remaining in output BAM. | TooFewRepeats   |
+| **Too Close Start**    | The telomeric boundary is too close (within 60 bases) of the Start of the read. Read is excluded from further analysis, is tagged as failing QC, remaining in output BAM. | TooCloseStart     |
+| **Too Close End**    | The telomeric boundary is too close (within 60 bases) of the end of the read. Read is excluded from further analysis, is tagged as failing QC, remaining in output BAM. | TooCloseEnd     |
 | **Start Not Repeats** | The first 30% of the read is not 80% repeats. Read is excluded from further analysis, is tagged as failing QC, remaining in output BAM. | StartNotRepeats |
-| **Too Close End**    | The telomeric boundary is too close (within 80 bases) of the end of the read. Read is excluded from further analysis, is tagged as failing QC, remaining in output BAM. | TooCloseEnd     |
 | **Low Sub-Telo Qual** | The mean basecall Q score of the region after the boundary is below a default value of 9. Read is excluded from further analysis, is tagged as failing QC, remaining in output BAM. | LowSubTeloQual  |
 | **Too Errorful**     | At least 5 known basecall error motifs have been observed within a 500 base pair frame in the subtelomere. Read is excluded from further analysis, is tagged as failing QC, remaining in output BAM. | TooErrorful |
 | **Telomere only**     | Sequence after telomere boundary is CCC rich, and so is most likely still actually telomeric repeat sequence, meaning the detected boundary is unreliable. | TelomereOnly |
@@ -243,7 +244,7 @@ Reads which pass all filtering checks are tagged with `qc:Z:Good`.
 The following filter is only applied if alignment is performed:
 | Filter               | Description                                                                 | Tag               |
 |----------------------|---------------------------------------------------------------------------|------------------|
-| **Bad Alignment**    | Query read has a low Gap compressed identity to the reference. Read is excluded from further analysis, is tagged as failing QC, remaining in output BAM. | BadAlign        |
+| **Bad Alignment**    | Query read has a low Gap compressed identity to the reference (\< 0.8), or a low (\< 20) mapping quality. Read is excluded from further analysis, is tagged as failing QC, remaining in output BAM. | BadAlign        |
 
 All reads have a `tl:i` tag set, which represents the estimated telomere length. 
 For reads which a boundary CANNOT be determined, the value of this tag is set to -1.
@@ -263,7 +264,7 @@ The pipeline does not separate out these two arms based upon telomere length fro
 ### Processing of alignments
 After alignment, the alignments are used to aggregate stats based on the reference contigs.
 One final filtering step is first performed here, which is based on the Gap compressed identity between the query sequence and the target reference, as calculated by minimap2.
-Any read with an identity of less than 0.8 is excluded from the estimated telomere length statistics.
+Any read with an identity of less than 0.8 and a mapping quality of less than 20 is excluded from the estimated telomere length statistics.
 Only primary alignments are used in this aggregation, and only those from reads which have the `qc:Z` tag set with a value of `Good`, indicating they passed all initial filtering steps.
 
 After this stage a tagged BAM file containing both mapped and unmapped reads is produced and output per sample.

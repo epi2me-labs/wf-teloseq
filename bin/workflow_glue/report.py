@@ -129,12 +129,13 @@ def main(args):
                             definitions = [
                                 ('TooShort', 'The read was too short (less than 160 bases).'),  # noqa: E501
                                 ('TooFewRepeats', 'There were fewer than 20 telomeric repeat motifs across the entire read.'),  # noqa: E501
+                                ('TooCloseStart', 'The telomeric boundary is too close (within 60 bases) to the read start.'),  # noqa: E501
+                                ('TooCloseEnd', 'The telomeric boundary is too close (within 60 bases) to the read end.'),  # noqa: E501
                                 ('StartNotRepeats', 'The first 30% of the read is < 80% repeats.'),  # noqa: E501
-                                ('TooCloseEnd', 'The telomeric boundary is too close (within 80 bases) to the read end.'),  # noqa: E501
                                 ('LowSubTeloQual', 'The mean basecall Q score of the region after the boundary is below 9.'),  # noqa: E501
                                 ('TelomereOnly', 'Sequence after boundary is rich in CCC kmers, and is likely extra telomere after a misidentified boundary.'),  # noqa: E501
                                 ('TooErrorful', 'A large number of known basecalling error motifs have been observed in the subtelomere.'),  # noqa: E501
-                                ('BadAlign', 'A low gap-compressed identity to the reference. Only applicable to aligned reads.'),  # noqa: E501
+                                ('BadAlign', 'A low gap-compressed identity to the reference or low mapQ score. Only applicable to aligned reads.'),  # noqa: E501
                                 ('Good', 'Passes all filtering, and is included in final analyses of telomere lengths.')  # noqa: E501
                             ]
                             tags.b("Status definitions (in order of filtering):")
@@ -156,7 +157,9 @@ def main(args):
             tags.p(
                 """Bulk estimate(s) of telomere lengths from reads passing all QC
                    steps.
-                   In the event no reads passed for a sample, all values will be 0."""
+                   In the event no reads passed for a sample, all values will be 0.
+                   Note: The Min and Max values are within the median +/- 1.5X
+                   interquartile range."""
             )
             dfs = []
             for sample in sample_human_order:
@@ -181,11 +184,14 @@ def main(args):
         with report.add_section(
             "Aligned telomere lengths per contig", "Per contig summary"
         ):
-            tags.p("""Telomere length metrics grouped by alignment targets.
+            tags.p(
+                """Telomere length metrics grouped by alignment targets.
                 Only primary alignments from
                 reads which passed the QC filtering stages above are considered.
-                Supplementary and secondary alignments for reads are not included.""")
-
+                Supplementary and secondary alignments for reads are not included.
+                Note: The Min and Max values are within the median +/-
+                1.5X interquartile range."""
+            )
             tabs = Tabs()
             for sample in sample_human_order:
                 with tabs.add_tab(sample):

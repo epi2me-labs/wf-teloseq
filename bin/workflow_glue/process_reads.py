@@ -35,6 +35,7 @@ VARIANT_MOTIFS = {
     "CCCTCA",
     "CCCTAC",
     "CCCTAT",
+    "CCCTAG"
 }
 
 
@@ -106,10 +107,12 @@ class BoundaryFinder(enum.Enum):
     TooFewRepeats = "TooFewRepeats"
     # Unable to determine the boundary for whatever reason
     FailedAnalysis = "FailedAnalysis"
+    # The telomere boundary is too close to the Start of the read, false positive
+    TooCloseStart = "TooCloseStart"
+    # The telomere boundary is too close to the end of the read, likely false positive
+    TooCloseEnd = "TooCloseEnd"
     # Read start (where repeats should be) did not have enough repeats
     StartNotRepeats = "StartNotRepeats"
-    # The telomere boundary is too close to the end of the read, likely false positive
-    TooCloseToEnd = "TooCloseEnd"
     # Too many error kmers clustered together
     TooErrorful = "TooErrorful"
     # Basecalls after boundary have low Q score
@@ -121,12 +124,12 @@ class BoundaryFinder(enum.Enum):
 def find_telo_boundary(
     record,
     motif,
-    filter_width=8,
-    min_repeats=20,
-    start_window=0.3,
-    start_repeats=0.8,
-    min_qual_non_telo=9,
-    post_boundary_ccc_threshold=0.25
+    filter_width,
+    min_repeats,
+    start_window,
+    start_repeats,
+    min_qual_non_telo,
+    post_boundary_ccc_threshold
 ):
     """Identify telomere boundary in the provided read, or None if read fails checks.
 
@@ -155,26 +158,23 @@ def find_telo_boundary(
     # by the motif detection
     motifs = ndimage.median_filter(motifs, size=width)
     edges = np.convolve(motifs, edge_filter, mode="valid")
-
     # boundary is defined as last drop of large magnitude
-    # "large" here is currently a complete half-window
+
     boundary = None
     min_value = np.min(edges)
     if min_value < filter_width * len(motif):
         boundary = np.where(edges == min_value)[0][-1] + width
     else:
-        return None, BoundaryFinder.CannotAnalyse
+        return None, BoundaryFinder.FailedAnalysis
+
+    # a boundary within or exactly one width away from start
+    # is artefactual
+    if boundary <= width:
+        return None, BoundaryFinder.TooCloseStart
 
     # a boundary within the filter width is more likely a false positive
-    if len(record.query_sequence) - boundary < width:
-        return None, BoundaryFinder.TooCloseToEnd
-
-    # if there's a low quality region after the telomere region,
-    # it's likely the basecaller went down the wrong track
-    # and we've misidentified the boundary
-    if quals := record.query_qualities:  # as we process references too
-        if np.median(quals[boundary:]) < min_qual_non_telo:
-            return None, BoundaryFinder.LowQuality
+    if len(record.query_sequence) - boundary < width / 2:
+        return boundary, BoundaryFinder.TooCloseEnd
 
     # common error is to have few repeats at the start of the read
     # require the start of detected telomere repeat section to be composed
@@ -182,7 +182,14 @@ def find_telo_boundary(
     # TODO: evaluate this heuristic more
     start = int(boundary * start_window)
     if np.sum(motifs[:start]) < start_repeats * start:
-        return None, BoundaryFinder.StartNotRepeats
+        return boundary, BoundaryFinder.StartNotRepeats
+
+    # if there's a low quality region after the telomere region,
+    # it's likely the basecaller went down the wrong track
+    # and we've misidentified the boundary
+    if quals := record.query_qualities:  # as we process references too
+        if np.median(quals[boundary:]) < min_qual_non_telo:
+            return boundary, BoundaryFinder.LowQuality
 
     # Check for CCC-rich motifs in post-boundary region
     post_seq = record.query_sequence[boundary:]
@@ -193,7 +200,7 @@ def find_telo_boundary(
     # `post_boundary_CCC_threshold` CCC motifs, we deem it likely to be
     # just more telomere, so we tag it to be filtered out
     if ccc_proportion > post_boundary_ccc_threshold:
-        return None, BoundaryFinder.TelomericOnly
+        return boundary, BoundaryFinder.TelomericOnly
 
     return boundary, BoundaryFinder.Good
 
@@ -385,7 +392,7 @@ def argparser():
         "Parameters for telomere motif detection.",
     )
     grp.add_argument(
-        "--min-repeats", type=int, default=20,
+        "--min-repeats", type=int, default=100,
         help="Minimum number of motif repeats to keep read.",
     )
     grp.add_argument(

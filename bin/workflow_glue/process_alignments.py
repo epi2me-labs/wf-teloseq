@@ -31,26 +31,6 @@ def determine_haplotype(ref):
     return ref_type
 
 
-# Function to compute box plot statistics
-def boxplot_stats(series):
-    """Calculate box plot stats and return."""
-    qmin, q1, median, q3, qmax = np.percentile(series, [0, 25, 50, 75, 100])
-    iqr = q3 - q1
-    lower_bound, upper_bound = max(qmin, q1 - 1.5 * iqr), min(qmax, q3 + 1.5 * iqr)
-
-    # Box plot min/max within whiskers
-    min_val = series[series >= lower_bound].min()
-    max_val = series[series <= upper_bound].max()
-
-    return {
-        "min": min_val,
-        "q1": q1,
-        "median": median,
-        "q3": q3,
-        "max": max_val,
-    }
-
-
 def get_tag_with_default(record, tag, default=None):
     """Get a tag from an `AlignedSegment`, returning default if not present."""
     try:
@@ -106,7 +86,10 @@ def main(args):
             # Only check identity for Primary alignments
             if not (record.flag & NOT_GOOD_PRIMARY):
                 identity = 1 - record.get_tag("de")
-                if identity < args.identity_threshold:
+                if (
+                    identity < args.identity_threshold or
+                    record.mapping_quality < args.mapq_threshold
+                ):
                     record.set_tag("qc", "BadAlign", value_type="Z")
                 else:
                     # Consider this record in dataframe aggregations
@@ -148,7 +131,7 @@ def main(args):
     df_good_reads = df[(df["analyse"]) & (df["qc"] == "Good")]
     boxplot_data = (
         df_good_reads.groupby("reference_name")["telomere_length"]
-        .agg(boxplot_stats)
+        .agg(ts_utils.boxplot_stats)
         .apply(pd.Series)
     )
     boxplot_data = boxplot_data.loc[natsort.natsorted(boxplot_data.index)]
@@ -204,6 +187,7 @@ def main(args):
         "TooShort",
         "TooFewRepeats",
         "StartNotRepeats",
+        "TooCloseStart"
         "TooCloseEnd",
         "LowSubTeloQual",
         "TelomereOnly",
@@ -262,5 +246,9 @@ def argparser():
     parser.add_argument(
         "--identity-threshold", type=float, default=0.8,
         help="Minimum gap compressed identity for an alignment to be considered.",
+    )
+    parser.add_argument(
+        "--mapq-threshold", type=int, default=20,
+        help="Minimum map quality for an alignment to be considered.",
     )
     return parser
