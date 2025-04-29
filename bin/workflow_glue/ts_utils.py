@@ -1,7 +1,4 @@
 """Shared code for teloseq wf-glue."""
-
-from functools import partial
-
 import numpy as np
 import pandas as pd
 
@@ -24,6 +21,25 @@ def calculate_cv(data, ddof=1):
     return np.nan_to_num(series_std / series_mean)
 
 
+def boxplot_stats(series):
+    """Calculate box plot stats and return."""
+    qmin, q1, median, q3, qmax = np.percentile(series, [0, 25, 50, 75, 100])
+    iqr = q3 - q1
+    lower_bound, upper_bound = max(qmin, q1 - 1.5 * iqr), min(qmax, q3 + 1.5 * iqr)
+
+    # Box plot min/max within whiskers
+    min_val = series[series >= lower_bound].min()
+    max_val = series[series <= upper_bound].max()
+
+    return {
+        "min": min_val,
+        "q1": q1,
+        "median": median,
+        "q3": q3,
+        "max": max_val,
+    }
+
+
 def process_telomere_stats(series):
     """Process telomere length statistics, output summary metrics and CSVs.
 
@@ -39,17 +55,10 @@ def process_telomere_stats(series):
     if series.empty:
         return None
 
-    # Create partial functions for each quartile
-    q1 = partial(np.percentile, q=25)
-    q3 = partial(np.percentile, q=75)
-
-    # Define aggregation functions
     agg_functions = {
-        "Read count": "size",
-        "Min length": "min",
-        "Median length": "median",
-        "Max length": "max",
+        "Read count": "size"
     }
+    box_stats = boxplot_stats(series)
 
     # Aggregate statistics
     summary_stats = series.agg(agg_functions)
@@ -57,8 +66,12 @@ def process_telomere_stats(series):
     # so run separately
     # See https://stackoverflow.com/questions/68091853/python-cannot-perform-both-aggregation-and-transformation-operations-simultaneo  # noqa: E501
     summary_stats["CV"] = calculate_cv(series.values)
-    summary_stats["Q1"] = q1(series.values)
-    summary_stats["Q3"] = q3(series.values)
+    summary_stats["Q1"] = box_stats["q1"]
+    summary_stats["Q3"] = box_stats["q3"]
+    summary_stats["Min length"] = box_stats["min"]
+    summary_stats["Median length"] = box_stats["median"]
+    summary_stats["Max length"] = box_stats["max"]
+
     summary_df = summary_stats.to_frame().T
     # Round to human friendly DP
     summary_df = summary_df.round({"CV": 2})

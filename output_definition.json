@@ -41,15 +41,15 @@
       "type": "per-sample"
     },
     "processed-bam": {
-      "filepath": "{{alias}}/aligned_data/alignment_filtered_teloseqs.bam",
+      "filepath": "{{alias}}/aligned_data/{{alias}}_aligned_filtered_teloseqs.bam",
       "title": "Aligned, filtered and tagged sequences.",
       "description": "Contains the sequences from the processed_fastq aligned to the provided reference. All sequences which passed initial read length (`--min_length`) and quality (`--read_quality`) filtering will be present, including unmapped. Only produced if alignment is performed.",
-      "mime-type": "application/octet-stream",
+      "mime-type": "application/gzip",
       "optional": true,
       "type": "per-sample"
     },
     "processed-bam-index": {
-      "filepath": "{{alias}}/aligned_data/alignment_filtered_teloseqs.bam.csi",
+      "filepath": "{{alias}}/aligned_data/{{alias}}_aligned_filtered_teloseqs.bam.csi",
       "title": "Accompanying index for the aligned BAM.",
       "description": "Coordinate-sorted index file for the aligned data BAM.",
       "mime-type": "application/octet-stream",

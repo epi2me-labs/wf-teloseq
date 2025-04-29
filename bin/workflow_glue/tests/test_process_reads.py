@@ -1,6 +1,6 @@
 """Tests for the functionaility in workflow-glue process_reads."""
 
-from collections import defaultdict
+from collections import Counter, defaultdict
 import os
 from pathlib import Path
 import random
@@ -20,12 +20,20 @@ random.seed(0)
 
 SCRIPT_DIR = script_dir = Path(__file__).parent
 TEST_BAM = SCRIPT_DIR / "static" / "test_telomere_boundary.bam"
+TEST_SHORT_SUBTELO_BAM = SCRIPT_DIR / "static" / "short_subtelomere.bam"
 
 
 @pytest.fixture
 def bam_file():
     """Yield BAM file for tests."""
     with pysam.AlignmentFile(TEST_BAM, "rb", check_sq=False) as bam:
+        yield bam
+
+
+@pytest.fixture
+def short_subtelo_bam():
+    """Yield BAM file for tests."""
+    with pysam.AlignmentFile(TEST_SHORT_SUBTELO_BAM, "rb", check_sq=False) as bam:
         yield bam
 
 
@@ -41,66 +49,34 @@ def records(bam_file):
 @pytest.mark.parametrize(
     "query_name, expected_boundary, expected_class",
     [
-        ("0f88584f-bfd2-4b5c-9a19-5ef2402a54bf", 4295, BoundaryFinder.Good),
-        ("b4470370-96c3-41ab-b1e6-11ba396c5524", 3789, BoundaryFinder.Good),
-        ("b8090f53-643c-48b2-bc74-30a2d233e9a7", 2510, BoundaryFinder.Good),
-        ("a03facf6-9418-4d92-b0f1-7550c1569f38", None, BoundaryFinder.TelomericOnly),
-        (
-            "62726334-0660-4759-a7d2-b30c966fc098",
-            None,
-            BoundaryFinder.LowQuality,
-        ),
-        (
-            "502e8d1b-e5dc-4c3d-94f8-54a067e1b411",
-            None,
-            BoundaryFinder.LowQuality,
-        ),
-        (
-            "b6e75c9f-eb90-4bb9-b809-ed141e474d9a",
-            None,
-            BoundaryFinder.LowQuality,
-        ),
-        (
-            "669ee9fa-2206-4124-9d0c-d879519f31fc",
-            None,
-            BoundaryFinder.LowQuality,
-        ),
-        (
-            "7dbba504-6c22-4c53-8abf-6e68fd5bd8db",
-            None,
-            BoundaryFinder.StartNotRepeats,
-        ),
-        (
-            "4546cfd2-f09d-4594-af29-32a480db025c",
-            5018,
-            BoundaryFinder.Good,
-        ),
-        (
-            "45a5e92c-6ee7-44a9-9b30-affa1581b645",
-            None,
-            BoundaryFinder.TooFewRepeats,
-        ),
-        (
-            "ddb5ebba-c386-4ce8-91c5-31a1fca25922",
-            None,
-            BoundaryFinder.TooFewRepeats,
-        ),
-        (
-            "23ecb278-2c5d-469a-90cc-8a8e7eabd747",
-            None,
-            BoundaryFinder.TooFewRepeats,
-        ),
-        (
-            "too_close_to_end",
-            None,
-            BoundaryFinder.TooCloseToEnd,
-        ),
+        ("0f88584f-bfd2-4b5c-9a19-5ef2402a54bf", 4301, BoundaryFinder.Good),
+        ("b4470370-96c3-41ab-b1e6-11ba396c5524", 3795, BoundaryFinder.Good),
+        ("b8090f53-643c-48b2-bc74-30a2d233e9a7", 2516, BoundaryFinder.Good),
+        ("a03facf6-9418-4d92-b0f1-7550c1569f38", 1833, BoundaryFinder.TelomericOnly),
+        ("62726334-0660-4759-a7d2-b30c966fc098", 1125, BoundaryFinder.LowQuality),
+        ("502e8d1b-e5dc-4c3d-94f8-54a067e1b411", 1541, BoundaryFinder.LowQuality),
+        ("b6e75c9f-eb90-4bb9-b809-ed141e474d9a", 2882, BoundaryFinder.LowQuality),
+        ("669ee9fa-2206-4124-9d0c-d879519f31fc", 858, BoundaryFinder.StartNotRepeats),
+        ("7dbba504-6c22-4c53-8abf-6e68fd5bd8db", 4663, BoundaryFinder.StartNotRepeats),
+        ("4546cfd2-f09d-4594-af29-32a480db025c", 4945, BoundaryFinder.Good),
+        ("45a5e92c-6ee7-44a9-9b30-affa1581b645", None, BoundaryFinder.TooFewRepeats),
+        ("ddb5ebba-c386-4ce8-91c5-31a1fca25922", None, BoundaryFinder.TooFewRepeats),
+        ("23ecb278-2c5d-469a-90cc-8a8e7eabd747", None, BoundaryFinder.TooFewRepeats),
+        ("too_close_to_end", 599, BoundaryFinder.TooCloseEnd),
     ],
 )
 def test_find_telo_boundary(query_name, expected_boundary, expected_class, records):
     """Test the boundary detection algorithm on a small known dataset."""
     record = records[query_name]
-    boundary, classification = find_telo_boundary(record, TELOMERE_MOTIF)
+    boundary, classification = find_telo_boundary(
+        record, TELOMERE_MOTIF,
+        filter_width=10,
+        min_repeats=100,
+        start_window=0.3,
+        start_repeats=0.8,
+        min_qual_non_telo=9,
+        post_boundary_ccc_threshold=0.25
+    )
     assert classification == expected_class
     assert boundary == expected_boundary
 
@@ -114,7 +90,15 @@ def test_find_telo_boundary(query_name, expected_boundary, expected_class, recor
 def test_error_clustering(query_name, records):
     """Test the max error detection - read has at least 20 non overlapping errors in."""
     record = records[query_name]
-    boundary, _classification = find_telo_boundary(record, TELOMERE_MOTIF)
+    boundary, _classification = find_telo_boundary(
+        record, TELOMERE_MOTIF,
+        filter_width=10,
+        min_repeats=100,
+        start_window=0.3,
+        start_repeats=0.8,
+        min_qual_non_telo=9,
+        post_boundary_ccc_threshold=0.25
+    )
     clust_size = largest_error_cluster(record.query_sequence, boundary)
     assert clust_size >= 20
 
@@ -210,6 +194,26 @@ def test_trim_adapters_telomere_fallback():
     assert result.query_qualities == quality_str[expected_trim_position:]
 
 
+def test_too_close_too_end(short_subtelo_bam):
+    """Test the too close too end for reads which have short sub telomere."""
+    count_classifications = Counter()
+    for record in short_subtelo_bam:
+        b, c = find_telo_boundary(
+            record, TELOMERE_MOTIF,
+            filter_width=10,
+            min_repeats=100,
+            start_window=0.3,
+            start_repeats=0.8,
+            min_qual_non_telo=9,
+            post_boundary_ccc_threshold=0.25
+        )
+        count_classifications[c.value] += 1
+    # These reads should be Good, were taken from Chr5,
+    # where cutsite is ~60 bases from end of telomere boundary
+    assert count_classifications["Good"] == 995
+    assert count_classifications["TooCloseEnd"] == 23
+
+
 def test_main(capsys, tmp_path):
     """Test main function.
 
@@ -224,15 +228,15 @@ def test_main(capsys, tmp_path):
     args = Mock()
 
     args.input_bam = str(
-        (SCRIPT_DIR / "static" / "test_telomere_boundary.bam").resolve()
+        (SCRIPT_DIR / "static" / "test_main.bam").resolve()
     )
     args.output_bam = "/dev/null"
     args.summary_tsv_name = summary_tsv
     args.sample = "TEST"
     args.filter_width = 10
-    args.min_repeats = 20
+    args.min_repeats = 100
     args.start_window = 0.3
-    args.start_repeats = 0.8
+    args.start_repeats = 0.5
     args.min_qual_non_telo = 9
     args.barcode = None
     args.skip_trimming = False
@@ -245,5 +249,5 @@ def test_main(capsys, tmp_path):
     captured = capsys.readouterr()
     # Added a read that gets trimmed:
     assert "Skipping read d89f9da1-cc54-414e-b014-e1fcb053cd4b, as it has no sequence left" in captured.err  # noqa: E501
-    assert "TooShort: 3, TooFewRepeats: 1, LowQuality: 5, StartNotRepeats: 1, Good: 4, TelomericOnly: 1, TooCloseToEnd: 1, TooErrorful: 1" in captured.err  # noqa: E501
+    assert "Good: 26, TelomericOnly: 29, TooCloseEnd: 34, TooErrorful: 19, StartNotRepeats: 5, TooShort: 41, TooFewRepeats: 32, LowQuality: 11" in captured.err  # noqa: E501
     assert summary_tsv.exists()
