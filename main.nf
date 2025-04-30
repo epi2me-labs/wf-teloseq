@@ -14,15 +14,25 @@ process getVersions {
     output: path "versions.txt"
     script:
     """
-    python -c "import matplotlib as mpl; print(f'matplotlib,{mpl.__version__}')" >> versions.txt
     python -c "import pysam; print(f'pysam,{pysam.__version__}')" >> versions.txt
     python -c "import pandas as pd; print(f'pandas,{pd.__version__}')" >> versions.txt
     python -c "import numpy as np; print(f'numpy,{np.__version__}')" >> versions.txt
-    python -c "import ezcharts; print(f'ezcharts,{ezcharts.__version__}')" >> versions.txt
     python -c "import edlib; import importlib.metadata; print(f'edlib,{importlib.metadata.version(\\"edlib\\")}')" >> versions.txt
+    python -c "import ezcharts as ez; print(f'ezcharts (analysis),{ez.__version__}')" >> versions_common.txt
     python -c "import scipy; print(f'scipy,{scipy.__version__}')" >> versions.txt
     samtools --version | grep samtools | head -1 | sed 's/ /,/' >> versions.txt
     minimap2 --version | awk '{print "minimap2," \$1}' >> versions.txt
+    """
+}
+
+process getVersionsCommon {
+    label "wf_common"
+    cpus 1
+    memory '2 GB'
+    output: path "versions_common.txt"
+    script:
+    """
+    python -c "import ezcharts as ez; print(f'ezcharts (report),{ez.__version__}')" >> versions_common.txt
     """
 }
 
@@ -38,12 +48,14 @@ process makeReport {
     input:
         val meta_array
         path "versions/*"
+        path "versions/*"
         path "params.json"
         path unaligned_stats, stageAs: "unaligned_stats/*"
+        path kde_stats, stageAs: "kde_stats/*"
         path fastcat_stats, stageAs: "fastcat_stats/sample_*"
-        path qc_stats, stageAs: "qc_stats/sample*/*"
-        path contig_stats, stageAs: "contig_stats/sample*/*"
-        path boxplot_stats, stageAs: "boxplot_stats/sample*/*"
+        path qc_stats, stageAs: "qc_stats/*"
+        path contig_stats, stageAs: "contig_stats/*"
+        path boxplot_stats, stageAs: "boxplot_stats/*"
     output:
         path "wf-teloseq-*.html"
     script:
@@ -69,6 +81,7 @@ process makeReport {
             --params params.json \\
             --workflow-version v${workflow.manifest.version} \\
             --unaligned-stats-dir unaligned_stats \\
+            --kde-stats-dir kde_stats \\
             --fastcat-stats fastcat_stats \\
             --qc-stats-dir qc_stats \\
             --contig-stats-dir contig_stats \\
@@ -86,15 +99,15 @@ workflow generic_preprocessing {
         filtered_samples = process_reads(samples)
 
         valid_samples_with_stats = filtered_samples
-            .map { meta, sub_telomeric_fastq_file, _length_sum, _stats_dir ->
+            .map { meta, sub_telomeric_fastq_file, length_sum, kde_sum, stats_dir ->
                 if (sub_telomeric_fastq_file.size() == 0) {
                      log.warn "SAMPLE: ${meta.alias} contains no valid sequences, removed from analysis..."
                 }
                 else {
-                    [meta, sub_telomeric_fastq_file, _length_sum, _stats_dir]
+                    [meta, sub_telomeric_fastq_file, length_sum, kde_sum, stats_dir]
                 }
             }
-            .filter { _meta, sub_telomeric_fastq_file, _length_sum, _stats_dir ->
+            .filter { _meta, sub_telomeric_fastq_file, _length_sum, _kde_sum, _stats_dir ->
                 sub_telomeric_fastq_file.size() > 0
             }
             .ifEmpty {
@@ -117,6 +130,7 @@ workflow pipeline {
         // Get the workflow_params and software versions for report.
         workflow_params = getParams()
         software_versions = getVersions()
+        software_version_common = getVersionsCommon()
 
         preprocessing = generic_preprocessing(samples)
         
@@ -139,8 +153,8 @@ workflow pipeline {
             analysis_files_for_collection = aligned_outputs.alignment_stats
         } else {
             // map to get only stats files out -> matches to alignment output
-            analysis_files_for_collection = per_sample_stats.map{ meta, _sub_telomeric_fastq_file, length_sum, stats_dir -> 
-                [meta, length_sum, stats_dir]
+            analysis_files_for_collection = per_sample_stats.map{ meta, _sub_telomeric_fastq_file, length_sum, kde_stats, stats_dir -> 
+                [meta, length_sum, kde_stats, stats_dir]
             }
         }
         // Sort files from output tuple into individual channels so they can be collected and staged in report working directory.
@@ -150,6 +164,7 @@ workflow pipeline {
         (
             metadata_ch,
             unaligned_ch,
+            kde_ch,
             fastcat_stats_ch,
             boxplot_stats_ch,
             qc_stats_ch,
@@ -165,15 +180,16 @@ workflow pipeline {
             def contig_summary_stats = OPTIONAL_FILE
             //  Alignment was performed, set stats files paths for report.
             if (!params.skip_mapping) {
-                  boxplot_stats = stats_files[3]
-                  qc_stats = stats_files[4]
-                  contig_summary_stats = stats_files[5]
+                  boxplot_stats = stats_files[4]
+                  qc_stats = stats_files[5]
+                  contig_summary_stats = stats_files[6]
             }
 
             // Return file elements
             metadata_ch: meta
             unaligned_stats_ch: stats_files[0]
-            fastcat_stats_ch: stats_files[1]
+            kde_ch: stats_files[1]
+            fastcat_stats_ch: stats_files[2]
             boxplot_stats_ch: boxplot_stats
             qc_stats_ch: qc_stats
             contig_summary_stats_ch: contig_summary_stats
@@ -182,8 +198,10 @@ workflow pipeline {
         makeReport(
             metadata_ch | collect,
             software_versions,
+            software_version_common,
             workflow_params,
             unaligned_ch | collect,
+            kde_ch | collect,
             fastcat_stats_ch | collect,
             qc_stats_ch | collect,
             contig_stats_ch | collect,

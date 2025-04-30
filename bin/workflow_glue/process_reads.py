@@ -13,10 +13,13 @@ import re
 import sys
 
 import edlib
+# NOTE - this ezcharts is from `wf-teloseqs` container - not `wf-common`!
+# Remember to update!
+from ezcharts.plots.util import kernel_density_estimate
 import numpy as np
 import pandas as pd
 import pysam
-from scipy import ndimage
+import scipy
 from workflow_glue import ts_utils
 
 from .util import wf_parser  # noqa: ABS101
@@ -156,7 +159,7 @@ def find_telo_boundary(
     # find edges, the median filter is a sharpening filter
     # that remove artefacts from inexact matches not detected
     # by the motif detection
-    motifs = ndimage.median_filter(motifs, size=width)
+    motifs = scipy.ndimage.median_filter(motifs, size=width)
     edges = np.convolve(motifs, edge_filter, mode="valid")
     # boundary is defined as last drop of large magnitude
 
@@ -341,6 +344,21 @@ def main(args):
             boundaries.append(boundary)
             qualities.append(np.mean(record.query_qualities))
 
+    if boundaries:
+        kde_x, kde_y = kernel_density_estimate(boundaries)
+        data = np.column_stack((kde_x, kde_y))
+        np.savetxt(
+            args.kde_tsv_name,
+            data,
+            delimiter='\t',
+            header="length\tdensity",
+            comments=''
+        )
+    else:
+        # Write out empty TSV
+        with open(args.kde_tsv_name, "w") as fh:
+            fh.write("length\tdensity")
+
     # Write the summary metrics out for use in report.
     summary_data = ts_utils.process_telomere_stats(pd.Series(boundaries))
     if summary_data is not None:
@@ -384,6 +402,10 @@ def argparser():
     parser.add_argument(
         "--summary-tsv-name", type=Path, default="unaligned_summary_stats.tsv",
         help="Name of stats TSV file to output.",
+    )
+    parser.add_argument(
+        "--kde-tsv-name", type=Path, default="kde_stats.tsv",
+        help="Name of KDE data TSV file to output.",
     )
 
     # Motif and read filtering
