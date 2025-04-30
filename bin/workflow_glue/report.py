@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 from dominate import tags
+from ezcharts import kdeplot
 from ezcharts.components.ezchart import EZChart
 from ezcharts.components.fastcat import SeqSummary
 from ezcharts.components.reports import labs
@@ -115,9 +116,7 @@ def main(args):
                         "grid-row-gap: 20px",
                     )
                     with Grid(columns=None, styles=igrid):
-                        (file_path,) = tuple(
-                            args.qc_stats_dir.rglob(f"{sample}*.tsv")
-                        )
+                        file_path = args.qc_stats_dir / f"{sample}_qc_modes_metrics.tsv"
                         df = pd.read_csv(file_path, sep="\t")
                         df = _format_dataframes(
                             df, thousand_sep_columns=["Median read length"]
@@ -163,10 +162,11 @@ def main(args):
             )
             dfs = []
             for sample in sample_human_order:
-                (file_path,) = tuple(
-                    args.unaligned_stats_dir.rglob(f"{sample}*.tsv")
+                unaligned_file_path = (
+                    args.unaligned_stats_dir /
+                    f"{sample}_telomere_unaligned_metrics.tsv"
                 )
-                dfs.append(pd.read_csv(file_path, sep="\t"))
+                dfs.append(pd.read_csv(unaligned_file_path, sep="\t"))
             df = pd.concat(dfs)
             if df.empty:
                 tags.p("No reads passed filtering, no statistics were generated.")
@@ -178,6 +178,38 @@ def main(args):
                 DataTable.from_pandas(
                     df, use_index=False, searchable=False, paging=False
                 )
+
+    if list(args.kde_stats_dir.rglob("*.tsv")):
+        with report.add_section(
+            "Single molecule telomere lengths",
+            (
+                "Kernel density estimate plot of alignment",
+                "-free bulk telomere lengths"
+            ),
+        ):
+            tags.p(
+                """
+                Kernel density plots of all QC passing reads for each sample.
+                These plots show the distribution of lengths of all telomeric
+                reads in the chosen sample.
+                """
+            )
+            tabs = Tabs()
+            for sample in sample_human_order:
+                with tabs.add_tab(sample):
+                    kde_file_path = args.kde_stats_dir / f"{sample}_kde_data.tsv"
+                    df = pd.read_csv(kde_file_path, sep="\t")
+                    if df.empty:
+                        tags.p(
+                            "No reads passed filtering, no statistics were generated."
+                        )
+                    else:
+                        plt = kdeplot(
+                            (df["density"].values, df["length"].values),
+                            compute=False
+                        )
+                        plt._fig.x_range.range_padding = 0.0
+                        EZChart(plt)
 
     # Check we have files to display
     if list(args.contig_stats_dir.rglob("*.tsv")):
@@ -198,10 +230,11 @@ def main(args):
                     try:
                         # At this point there HAS to be only one file for this sample
                         # Fun little unpacking trick
-                        (file_path,) = tuple(
-                            args.contig_stats_dir.rglob(f"{sample}*.tsv")
+                        contig_file_path = (
+                            args.contig_stats_dir /
+                            f"{sample}_contig_telomere_aligned_metrics.tsv"
                         )
-                        df = pd.read_csv(file_path, sep="\t")
+                        df = pd.read_csv(contig_file_path, sep="\t")
                         df = _format_dataframes(df)
                         DataTable.from_pandas(df, use_index=False)
                     except pd.errors.EmptyDataError:
@@ -223,10 +256,11 @@ def main(args):
             tabs = Tabs()
             for sample in sample_human_order:
                 with tabs.add_tab(sample):
-                    (file_path,) = tuple(
-                        args.boxplot_stats_dir.rglob(f"{sample}*.tsv")
+                    boxplot_data_file_path = (
+                        args.boxplot_stats_dir /
+                        f"{sample}_boxplot_values.tsv"
                     )
-                    df = pd.read_csv(file_path, sep="\t")
+                    df = pd.read_csv(boxplot_data_file_path, sep="\t")
                     if df.empty:
                         tags.p("""Sample had no reads which meet the criteria for stats
                             generation. Either all reads failed QC validation
@@ -304,7 +338,11 @@ def argparser():
     )
     parser.add_argument(
         "--unaligned-stats-dir", type=Path, default=None,
-        help="Directory containing the unaligned stats TSVS for this workflow.",
+        help="Directory containing the unaligned stats TSVs for this workflow.",
+    )
+    parser.add_argument(
+        "--kde-stats-dir", type=Path, default=None,
+        help="Directory containing the kde density TSVs for unaligned stats.",
     )
     parser.add_argument(
         "--fastcat-stats-dir", type=Path, default=None,
