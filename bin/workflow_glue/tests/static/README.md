@@ -1,12 +1,16 @@
 ### Test data for workflow glue tests
 
-#### test_ref_reads.bam
-Calculated the boundary of telomere repeats for each contig in the reference contained in wf-teloseq/data/HG002qpMP_reference.fasta.gz.
-Created reads which are boundary -1000, boundary + 2000.
-Generated between 0 and 10 reads for each contig, mapped these back to wf-teloseq/data/HG002qpMP_reference.fasta.gz.
-Added in the TL tag for these reads as calculated by `find_telomere_boundary` in `process_reads.py`.
-Used for tests of `process_alignments.py`.
-
 #### test_telomere_boundary.fastq.gz
 Iterated the wf-teloseq test data set, using `process_reads.py`.
 Saved the first three reads which hit a certain BoundaryFinder variant into this FASTQ.
+
+#### test_main_alignment.bam
+Reads from the test-dataset with one added from the release dataset barcode 01, which QC's as `TooCloseStart`.
+
+#### short_subtelomere.bam
+Reads which align to Chr5 Paternal P. This contig arm has a short subtelomere section, which can be misidentified as `TooCloseEnd`.
+
+#### test_main.bam
+Took 10 reads from Barcode01 of the release dataset, from every QC mode assigned.
+Merged these reads with the contents of `test_telomere_boundary.bam`.
+Hits every QC mode, used to test `process_reads`.

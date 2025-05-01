@@ -187,7 +187,7 @@ def main(args):
         "TooShort",
         "TooFewRepeats",
         "StartNotRepeats",
-        "TooCloseStart"
+        "TooCloseStart",
         "TooCloseEnd",
         "LowSubTeloQual",
         "TelomereOnly",
