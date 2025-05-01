@@ -9,15 +9,11 @@ from unittest.mock import Mock
 import numpy as np
 import pysam
 import pytest
-from workflow_glue.process_alignments import (
-    determine_haplotype,
-    main,
-    mean_quality
-)
+from workflow_glue.process_alignments import determine_haplotype, main, mean_quality
 
 
 SCRIPT_DIR = Path(__file__).parent
-TEST_BAM = SCRIPT_DIR / "static" / "test_ref_reads.bam"
+TEST_MAIN_BAM = SCRIPT_DIR / "static" / "test_main_alignment.bam"
 
 
 # If this didn't work I would quit and open a bakery
@@ -46,18 +42,11 @@ def test_mean_quality():
 
     # redo calculation if tag not present
     record = Mock()
-    record.get_tag = Mock(side_effect=KeyError('qs'))
+    record.get_tag = Mock(side_effect=KeyError("qs"))
     record.query_qualities = [10, 20, 30, 40, 50]
     assert np.isnan(mean_quality(record, trim=10))  # trimmed away
     assert np.isclose(mean_quality(record, trim=0), 16.5321, atol=0.001)  # all
     assert np.isclose(mean_quality(record, trim=3), 42.5963, atol=0.001)  # 40, 50
-
-
-@pytest.fixture
-def bam_file():
-    """Yield BAM file for tests."""
-    with pysam.AlignmentFile(TEST_BAM, "rb") as bam:
-        yield bam
 
 
 def test_main(tmp_path):
@@ -69,7 +58,7 @@ def test_main(tmp_path):
     contig_summary_tsv = tmp_path / "contig_summary.tsv"
 
     args = Mock()
-    args.input_bam = TEST_BAM
+    args.input_bam = TEST_MAIN_BAM
     args.output_bam = output_bam
     args.sample = "TEST"
     args.summary_tsv_name = summary_stats_tsv
@@ -87,12 +76,27 @@ def test_main(tmp_path):
         for record in bam:
             assert record.has_tag("HP")
             assert record.has_tag("tl")
-        expected_record_count = 834
+        expected_record_count = 992
         assert (
-            sum(x.mapped for x in bam.get_index_statistics())
-            == expected_record_count
+            sum(x.mapped for x in bam.get_index_statistics()) == expected_record_count
         )
 
     assert boxplot_stats_tsv.exists()
     assert qc_tsv.exists()
+    # Check there are no NaNs in the table
+    qc_table_text = qc_tsv.read_text()
+    assert "nan" not in qc_table_text
+    expected_qc = (
+        "Status\tTotal reads\tMedian read length\tMedian quality\tMedian identity\n"
+        "TooFewRepeats\t9\t4864\t21.73\t0.99\n"
+        "StartNotRepeats\t71\t6760\t15.16\t0.98\n"
+        "TooCloseStart\t1\t864\t24.48\t0.00\n"
+        "TooCloseEnd\t4\t2236\t20.73\t1.00\n"
+        "LowSubTeloQual\t17\t5279\t10.71\t0.91\n"
+        "TelomereOnly\t4\t1907\t18.93\t0.99\n"
+        "TooErrorful\t96\t8368\t14.93\t0.97\n"
+        "BadAlign\t16\t6938\t12.19\t0.95\n"
+        "Good\t779\t8571\t20.53\t0.99\n"
+    )
+    assert qc_table_text == expected_qc
     assert summary_stats_tsv.exists()
