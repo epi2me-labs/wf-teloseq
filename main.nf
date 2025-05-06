@@ -126,7 +126,6 @@ workflow pipeline {
     main:
 
         def OPTIONAL_FILE = file("$projectDir/data/OPTIONAL_FILE")
-
         // Get the workflow_params and software versions for report.
         workflow_params = getParams()
         software_versions = getVersions()
