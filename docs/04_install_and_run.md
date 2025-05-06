@@ -46,7 +46,7 @@ tar -xzvf wf-teloseq-demo.tar.gz
 The workflow can then be run with the downloaded demo data using:
 ```
 nextflow run epi2me-labs/wf-teloseq \
-	--bam 'wf-teloseq-demo/teloseq_example' \
+	--bam 'wf-teloseq-demo/data' \
 	--reference 'wf-teloseq-demo/HG002qpMP_reference.fasta.gz' \
 	-profile standard
 ```
