@@ -27,9 +27,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Documentation has been updated and rewritten.
 - Output BAM now contains all input data, even unmapped and those lacking detectable telomeric boundaries, allowing for further analysis by the user.
 - Reads which fail QC will still have any detected telomere boundary tagged on the record, in order to enable further downstream investigation.
-- Updated to wf-template v5.6.0, changing:
+- Updated to wf-template v5.6.1, changing:
     - Reduce verbosity of debug logging from fastcat which can occasionally occlude errors found in FASTQ files during ingress.
     - Log banner art to say "EPI2ME" instead of "EPI2ME Labs" to match current branding. This has no effect on the workflow outputs.
+    - pre-commit configuration to resolve an internal dependency problem with flake8. This has no effect on the workflow.
 
 ### Removed
 - Removed the "de novo" guided route.
@@ -39,7 +40,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Pipeline now correctly handles empty input files in a multi sample run. Samples with no input will be filtered out, and a warning will be logging per sample removed.
 - Samples with no good telomere data will be carried through the workflow, and correctly tagged. The report will contain basic statistics about the sample, but all telomere related stats and plots will contain explainers that there was no data.
 - Minimum and Maximum values displayed in table are now the same as those used in the Boxplots (within 1.5 x interquartile range of the median).
-- Updated to wf-template v5.6.0, fixing:
+- Updated to wf-template v5.6.1, fixing:
     - dacite.exceptions.WrongTypeError during report generation when barcode is null.
     - Sequence summary read length N50 incorrectly displayed minimum read length, it now correctly shows the N50.
     - Sequence summary component alignment and coverage plots failed to plot under some conditions.
