@@ -10,8 +10,19 @@ High accuracy (HAC) basecalling will also work but will result in a slightly red
 For best results, we recommend a minimum of 1000 telomere reads per sample for alignment based analyses.
 If a reference is not provided via the `--reference` or `--sample_sheet` parameter, then a telomere reference constructed from HG002 (`data/HG002qpMP_reference.fasta.gz`) is used by default for alignment.
 
-See our [Know-How document](https://community.nanoporetech.com/knowledge/know-how/TELO-seq) for further information.
+A base-calling script is included in the `wf-teloseq` repository under `bin/basecalling.sh`.
+This script requires Dorado `basecaller` to be installed and available on your PATH.
+Instructions for Dorado installation can be found [here](https://github.com/nanoporetech/dorado/?tab=readme-ov-file#installation).
+The script uses specific barcode sequences for the TeloSeq protocol to correctly demultiplex data, and arrange the created BAM files in the directory arrangement that `wf-teloseq` expects.
 
+#### Example usage:
+Assuming pod5 files are in the directory `/data/example_experiment/example_run/`,
+```bash
+cd wf-teloseq
+./bin/basecalling.sh -m hac -i /data/example_experiment/example_run/ -o TeloSeq_data
+```
+
+This will create the `TeloSeq_data` folder and lay out all barcodes in their own sub-folders.
 
 ## 2. Read filtering and tagging
 Filters are listed in the order that they are applied.
@@ -38,7 +49,7 @@ Reads which pass all filtering checks are tagged with `qc:Z:Good`.
 The following filter is only applied if alignment is performed:
 | Filter               | Description                                                                 | Tag               |
 |----------------------|---------------------------------------------------------------------------|------------------|
-| **Bad Alignment**    | Query read has a low Gap compressed identity to the reference (\< 0.8), or a low (\< 20) mapping quality. Read is excluded from further analysis, is tagged as failing QC, remaining in output BAM. | BadAlign        |
+| **Bad Alignment**    | Query read has a low gap-compressed identity to the reference (\< 0.8), or a low (\< 20) mapping quality. Read is excluded from further analysis, is tagged as failing QC, remaining in output BAM. | BadAlign        |
 
 All reads have a `tl:i` tag set, which represents the estimated telomere length. 
 For reads which a boundary CANNOT be determined, the value of this tag is set to -1.
@@ -57,7 +68,7 @@ The pipeline does not separate out these two arms based upon telomere length fro
 
 ### Processing of alignments
 After alignment, the alignments are used to aggregate stats based on the reference contigs.
-One final filtering step is first performed here, which is based on the Gap compressed identity between the query sequence and the target reference, as calculated by minimap2.
+One final filtering step is performed here, which is based on the gap-compressed identity between the query sequence and the target reference, as calculated by minimap2.
 Any read with an identity of less than 0.8 and a mapping quality of less than 20 is excluded from the estimated telomere length statistics.
 Only primary alignments are used in this aggregation, and only those from reads which have the `qc:Z` tag set with a value of `Good`, indicating they passed all initial filtering steps.
 

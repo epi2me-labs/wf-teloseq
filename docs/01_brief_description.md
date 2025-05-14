@@ -1,1 +1,1 @@
-A workflow to analyse telomere-enriched data generated using Oxford Nanopore’s Telo-Seq method.
+Nextflow pipeline for the analysis of telomeric sequence data generated with the Oxford Nanopore Telo-Seq protocol.

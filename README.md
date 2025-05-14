@@ -1,23 +1,22 @@
 # Telomere sequencing workflow
 
-A workflow to analyse telomere-enriched data generated using Oxford Nanopore’s Telo-Seq method.
+Nextflow pipeline for the analysis of telomeric sequence data generated with the Oxford Nanopore Telo-Seq protocol.
 
 
 
 ## Introduction
 
-`wf-teloseq` is a bioinformatics pipeline to analyse nanopore telomere sequencing (Telo-Seq) data. It is implemented in Nextflow.
+`wf-teloseq` is a Nextflow pipeline to provide telomere length estimates from data generated with the Telo-Seq protocol. 
 
 Telo-Seq aims to measure telomere length accurately and assign each telomere to a chromosome arm.
-The experimental protocol and sequencing are described in the Telo-Seq protocol and [Know-How](https://community.nanoporetech.com/knowledge/know-how/TELO-seq) documents.
-Telo-seq libraries are sequenced on Oxford Nanopore Technologies' sequencing devices.
-
 `wf-teloseq` currently defaults to an alignment based analysis.
-Users can provide a reference, or use a default which has been created from the telomeric regions of the phased telomere-to-telomere HG002 human reference genome.
-Alternatively, a reference-less "bulk" analysis can be performed, which simply provides a combined length estimation for all telomeres in each sample, for use in cases where a suitable reference is not available. 
+By default the workflow will use a suitable reference which has been created from the telomeric regions of the phased telomere-to-telomere (T2T) HG002 human reference genome, but users may optionally provide their own reference genome.
+Please note that a T2T reference genome matching the sample that has been sequenced is required for correct assignment of the reads to chromosome arms.
+If no reference genome is available, a reference-less analysis can be performed, which simply provides a global telomere length estimate based on the sequenced reads without chromosome arm assignment.
 
-> In order to run the analysis data must have been basecalled and demultiplexed using Telo-Seq specific basecalling.
-> A bash script to perform this basecalling is available in the wf-teloseq repository under `bin/basecalling.sh`. 
+**NOTE**
+In order to run the analysis, data must first be base-called and demultiplexed with Dorado using Telo-Seq specific configuration files.
+A bash script to perform this base-calling is available in the `wf-teloseq` repository under `bin/basecalling.sh`.
 
 
 
@@ -216,8 +215,19 @@ High accuracy (HAC) basecalling will also work but will result in a slightly red
 For best results, we recommend a minimum of 1000 telomere reads per sample for alignment based analyses.
 If a reference is not provided via the `--reference` or `--sample_sheet` parameter, then a telomere reference constructed from HG002 (`data/HG002qpMP_reference.fasta.gz`) is used by default for alignment.
 
-See our [Know-How document](https://community.nanoporetech.com/knowledge/know-how/TELO-seq) for further information.
+A base-calling script is included in the `wf-teloseq` repository under `bin/basecalling.sh`.
+This script requires Dorado `basecaller` to be installed and available on your PATH.
+Instructions for Dorado installation can be found [here](https://github.com/nanoporetech/dorado/?tab=readme-ov-file#installation).
+The script uses specific barcode sequences for the TeloSeq protocol to correctly demultiplex data, and arrange the created BAM files in the directory arrangement that `wf-teloseq` expects.
 
+#### Example usage:
+Assuming pod5 files are in the directory `/data/example_experiment/example_run/`,
+```bash
+cd wf-teloseq
+./bin/basecalling.sh -m hac -i /data/example_experiment/example_run/ -o TeloSeq_data
+```
+
+This will create the `TeloSeq_data` folder and lay out all barcodes in their own sub-folders.
 
 ## 2. Read filtering and tagging
 Filters are listed in the order that they are applied.
@@ -244,7 +254,7 @@ Reads which pass all filtering checks are tagged with `qc:Z:Good`.
 The following filter is only applied if alignment is performed:
 | Filter               | Description                                                                 | Tag               |
 |----------------------|---------------------------------------------------------------------------|------------------|
-| **Bad Alignment**    | Query read has a low Gap compressed identity to the reference (\< 0.8), or a low (\< 20) mapping quality. Read is excluded from further analysis, is tagged as failing QC, remaining in output BAM. | BadAlign        |
+| **Bad Alignment**    | Query read has a low gap-compressed identity to the reference (\< 0.8), or a low (\< 20) mapping quality. Read is excluded from further analysis, is tagged as failing QC, remaining in output BAM. | BadAlign        |
 
 All reads have a `tl:i` tag set, which represents the estimated telomere length. 
 For reads which a boundary CANNOT be determined, the value of this tag is set to -1.
@@ -263,7 +273,7 @@ The pipeline does not separate out these two arms based upon telomere length fro
 
 ### Processing of alignments
 After alignment, the alignments are used to aggregate stats based on the reference contigs.
-One final filtering step is first performed here, which is based on the Gap compressed identity between the query sequence and the target reference, as calculated by minimap2.
+One final filtering step is performed here, which is based on the gap-compressed identity between the query sequence and the target reference, as calculated by minimap2.
 Any read with an identity of less than 0.8 and a mapping quality of less than 20 is excluded from the estimated telomere length statistics.
 Only primary alignments are used in this aggregation, and only those from reads which have the `qc:Z` tag set with a value of `Good`, indicating they passed all initial filtering steps.
 
@@ -284,6 +294,8 @@ After this stage a tagged BAM file containing both mapped and unmapped reads is 
 
 <!---Frequently asked questions, pose any known limitations as FAQ's.--->
 
+- _Can I use TeloSeq and `wf-teloseq` on non human samples?_ Yes, although Telo-Seq has been tested on human data, it should work well on species with similar telomere repeat sequences.
+
 If your question is not answered here, please report any issues or suggestions on the [github issues](https://github.com/epi2me-labs/wf-teloseq/issues) page or start a discussion on the [community](https://community.nanoporetech.com/).
 
 
@@ -291,11 +303,6 @@ If your question is not answered here, please report any issues or suggestions o
 ## Related blog posts
 
 ## Additional
-
-Telo-Seq has only been tested on human data, but we expect it to work well on species with similar telomere repeat sequences.
-
-Telomere sequences are highly repetitive. Sometimes basecalling errors cause dense mis-basecalled repeats to occur in Telo-seq reads. These get soft-clipped off by the aligner in downstream analysis, which could result in underestimation of telomere lengths. `wf-teloseq` identifies such reads and excludes them from telomere length estimation.
-
 + [Importing third-party workflows into EPI2ME Labs](https://labs.epi2me.io/nexflow-for-epi2melabs/)
 
 See the [EPI2ME website](https://labs.epi2me.io/) for lots of other resources and blog posts.

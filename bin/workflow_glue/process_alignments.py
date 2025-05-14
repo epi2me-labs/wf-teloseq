@@ -81,7 +81,7 @@ def main(args):
             )
             # Only want to analyse good primary mappings
             analyse = False
-            # de tag is the gap compressed identity as assigned by minimap2
+            # de tag is the gap-compressed identity as assigned by minimap2
             # see https://lh3.github.io/2018/11/25/on-the-definition-of-sequence-identity  # noqa: E501
             # Only check identity for Primary alignments
             if not (record.flag & NOT_GOOD_PRIMARY):
@@ -245,7 +245,7 @@ def argparser():
     )
     parser.add_argument(
         "--identity-threshold", type=float, default=0.8,
-        help="Minimum gap compressed identity for an alignment to be considered.",
+        help="Minimum gap-compressed identity for an alignment to be considered.",
     )
     parser.add_argument(
         "--mapq-threshold", type=int, default=20,

@@ -99,7 +99,7 @@ def main(args):
                 ". Passing reads are tagged with the status: ",
                 tags.code("Good"),
                 ". Note that the median read length here is for the whole read, and "
-                "not the telomeric repeats. The identity used here is Gap compressed"
+                "not the telomeric repeats. The identity used here is gap-compressed"
                 " identity, where a value of 1 represents a perfect alignment.",
             )
             tabs = Tabs()
@@ -157,8 +157,13 @@ def main(args):
                 """Bulk estimate(s) of telomere lengths from reads passing all QC
                    steps.
                    In the event no reads passed for a sample, all values will be 0.
-                   Note: The Min and Max values are within the median +/- 1.5X
-                   interquartile range."""
+                   Note: The min and max values are within the median +/- 1.5X
+                   interquartile range.
+                   The coefficient of variation (CV) is a statistical measure that
+                   expresses the dispersion of data points around the mean, calculated
+                   as the ratio of the standard deviation to the mean.
+                   A lower value indicates less variation in measured telomere lengths.
+                   """
             )
             dfs = []
             for sample in sample_human_order:
@@ -217,12 +222,17 @@ def main(args):
             "Aligned telomere lengths per contig", "Per contig summary"
         ):
             tags.p(
-                """Telomere length metrics grouped by alignment targets.
+                """Telomere length metrics grouped by contig.
                 Only primary alignments from
                 reads which passed the QC filtering stages above are considered.
                 Supplementary and secondary alignments for reads are not included.
-                Note: The Min and Max values are within the median +/-
-                1.5X interquartile range."""
+                Note: The min and max values are within the median +/-
+                1.5X interquartile range.
+                The coefficient of variation (CV) is a statistical measure that
+                expresses the dispersion of data points around the mean, calculated
+                as the ratio of the standard deviation to the mean.
+                A lower value indicates less variation in measured telomere lengths.
+                """
             )
             tabs = Tabs()
             for sample in sample_human_order:
@@ -251,7 +261,7 @@ def main(args):
                 """Boxplot displaying aggregated lengths for telomeres
                 grouped by alignment target contig. Only primary alignments from
                 reads which passed the QC filtering stages above are considered.
-                supplementary and secondary alignments for reads are not included."""
+                Supplementary and secondary alignments for reads are not included."""
             )
             tabs = Tabs()
             for sample in sample_human_order:
