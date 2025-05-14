@@ -16,7 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - Too Close Start - The boundary is within one window width of the start of the read
     - Low Sub-Telo Qual - The median quality of the basecalled read after the telomere boundary is too low.
     - Too Errorful - Too many known basecalling error motifs are present in the telomere.
-    - Bad Alignment - The read has a low gap compressed identity to the reference, or a too low mapping quality.
+    - Bad Alignment - The read has a low gap-compressed identity to the reference, or a too low mapping quality.
     - Telomere Only - The composition of the post telomere boundary sequence for non-pverlapping `CCC` is more than 25%.
 - `--alignment_threads` parameter to control the number of threads used by minimap2. Defaults to 6. 
 
