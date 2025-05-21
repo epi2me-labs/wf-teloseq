@@ -207,13 +207,13 @@
     "resources": {
         "recommended": {
             "cpus": 16,
-            "memory": "32GB"
+            "memory": "12GB"
         },
         "minimum": {
-            "cpus": 8,
-            "memory": "16GB"
+            "cpus": 4,
+            "memory": "8GB"
         },
-        "run_time": "Approx 5 minutes per sample, or about 1 minute if not performing alignment.",
+        "run_time": "Using recommended compute: approximately 5 minutes per sample, or 1 minute if alignment is not performed.",
         "arm_support": false
     }
 }
