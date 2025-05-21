@@ -5,7 +5,6 @@ include:
 
 variables:
   NF_WORKFLOW_OPTS: "--fastq test_data/HG002_small_test.fastq.gz --alignment_threads 2"
-  RELEASE_WORKFLOW: "no"
   CI_FLAVOUR: "new"
 
 

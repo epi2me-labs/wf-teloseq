@@ -1,13 +1,13 @@
 Recommended requirements:
 
 + CPUs = 16
-+ Memory = 32GB
++ Memory = 12GB
 
 Minimum requirements:
 
-+ CPUs = 8
-+ Memory = 16GB
++ CPUs = 4
++ Memory = 8GB
 
-Approximate run time: Approx 5 minutes per sample, or about 1 minute if not performing alignment.
+Approximate run time: Using recommended compute: approximately 5 minutes per sample, or 1 minute if alignment is not performed.
 
 ARM processor support: False
