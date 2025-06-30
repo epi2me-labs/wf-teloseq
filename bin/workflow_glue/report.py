@@ -206,7 +206,10 @@ def main(args):
                     df = pd.read_csv(kde_file_path, sep="\t")
                     if df.empty:
                         tags.p(
-                            "No reads passed filtering, no statistics were generated."
+                            (
+                                "KDE requires at least 2 reads to"
+                                " pass telomere filtering steps."
+                            )
                         )
                     else:
                         plt = kdeplot(

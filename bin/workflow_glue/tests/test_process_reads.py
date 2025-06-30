@@ -1,21 +1,25 @@
 """Tests for the functionaility in workflow-glue process_reads."""
 
 from collections import Counter, defaultdict
+import csv
 import os
 from pathlib import Path
 import random
 from unittest.mock import Mock
 
+import numpy as np
 import pysam
 import pytest
 from workflow_glue.process_reads import (
     BoundaryFinder,
+    calculate_kde,
     find_telo_boundary,
     largest_error_cluster,
     main,
     TELOMERE_MOTIF,
     trim_adapters,
 )
+
 random.seed(0)
 
 SCRIPT_DIR = script_dir = Path(__file__).parent
@@ -69,13 +73,14 @@ def test_find_telo_boundary(query_name, expected_boundary, expected_class, recor
     """Test the boundary detection algorithm on a small known dataset."""
     record = records[query_name]
     boundary, classification = find_telo_boundary(
-        record, TELOMERE_MOTIF,
+        record,
+        TELOMERE_MOTIF,
         filter_width=10,
         min_repeats=100,
         start_window=0.3,
         start_repeats=0.8,
         min_qual_non_telo=9,
-        post_boundary_ccc_threshold=0.25
+        post_boundary_ccc_threshold=0.25,
     )
     assert classification == expected_class
     assert boundary == expected_boundary
@@ -91,13 +96,14 @@ def test_error_clustering(query_name, records):
     """Test the max error detection - read has at least 20 non overlapping errors in."""
     record = records[query_name]
     boundary, _classification = find_telo_boundary(
-        record, TELOMERE_MOTIF,
+        record,
+        TELOMERE_MOTIF,
         filter_width=10,
         min_repeats=100,
         start_window=0.3,
         start_repeats=0.8,
         min_qual_non_telo=9,
-        post_boundary_ccc_threshold=0.25
+        post_boundary_ccc_threshold=0.25,
     )
     clust_size = largest_error_cluster(record.query_sequence, boundary)
     assert clust_size >= 20
@@ -127,17 +133,20 @@ SEQUENCES = [
 # Barcode just outside prefix
 BARCODE_AFTER_PREFIX = f"{random_dna(201)}{BARCODES[0]}{random_dna(100)}"
 # Barcode with 2 mismatches within first 200bp, should match
-BARCODE_MISMATCH_2 = f"{random_dna(100)}{mutate_barcode(BARCODES[0], 2)}{random_dna(200)}"  # noqa: E501
+BARCODE_MISMATCH_2 = (
+    f"{random_dna(100)}{mutate_barcode(BARCODES[0], 2)}{random_dna(200)}"  # noqa: E501
+)
 # Barcode with 4 mismatches within first 200bp, shouldn't match
-BARCODE_MISMATCH_4 = f"{random_dna(100)}{mutate_barcode(BARCODES[0], 4)}{random_dna(200)}"  # noqa: E501
+BARCODE_MISMATCH_4 = (
+    f"{random_dna(100)}{mutate_barcode(BARCODES[0], 4)}{random_dna(200)}"  # noqa: E501
+)
 
 
 @pytest.mark.parametrize(
     "sequence, adapters, prefix, max_errors, expected_trim, expected_length",
     [
         # Exact barcode matches
-        *[(SEQUENCES[i], BARCODES, 200, 3, True, 200) for
-          i in range(4)],
+        *[(SEQUENCES[i], BARCODES, 200, 3, True, 200) for i in range(4)],
         # Barcode outside prefix — should not match
         (BARCODE_AFTER_PREFIX, BARCODES, 200, 3, False, None),
         # Barcode with 2 mismatches — still within error tolerance
@@ -167,7 +176,9 @@ def test_trim_adapters(
 
     else:
         assert trimmed_seq == sequence, "Sequence should remain unchanged"
-        assert trimmed_qual == "I" * len(sequence), "Quality scores should remain unchanged"  # noqa: E501
+        assert trimmed_qual == "I" * len(sequence), (
+            "Quality scores should remain unchanged"
+        )
 
 
 def test_trim_adapters_telomere_fallback():
@@ -183,10 +194,7 @@ def test_trim_adapters_telomere_fallback():
     record.query_qualities = quality_str
 
     result = trim_adapters(
-        record,
-        adapters=["TTTTTTTTTTTTTTTTTT"],
-        prefix=200,
-        max_errors=3
+        record, adapters=["TTTTTTTTTTTTTTTTTT"], prefix=200, max_errors=3
     )
     expected_trim_position = 50  # start location of motif
 
@@ -194,18 +202,74 @@ def test_trim_adapters_telomere_fallback():
     assert result.query_qualities == quality_str[expected_trim_position:]
 
 
+@pytest.mark.parametrize(
+    "values, expected",
+    [
+        ([], ["length", "density"]),  # Should fail and create Empty TSV (empty input)  # noqa: E501
+        ([420], ["length", "density"]),  # Should fail and create Empty TSV (Only 1 value)  # noqa: E501
+        ([1, 1], ["length", "density"]),  # Should fail and create Empty TSV (1 unique value)  # noqa: E501
+        (
+            [1, 2],
+            [
+                'length',
+                'density',
+                1.000000000000000000e+00,
+                4.306592395074496649e-01
+            ]
+        ),  # Should pass (2 unique values)
+        (
+            [1, 2, 3, 4, 5, 6],
+            [
+                "length",
+                "density",
+                1.000000000000000000e+00,
+                1.115873735550648727e-01,
+                2.000000000000000000e+00,
+                1.509601468422716863e-01,
+                3.000000000000000000e+00,
+                1.641127053753461129e-01,
+                4.000000000000000000e+00,
+                1.641127053753461407e-01,
+                5.000000000000000000e+00,
+                1.509601468422717141e-01,
+            ],
+        ),
+    ],
+)
+def test_calculate_kde(values, expected, tmp_path):
+    """Check kde calculated as expected."""
+    out_kde = tmp_path / "test_kde.tsv"
+    calculate_kde(values, out_kde, step=1)
+    result = []
+    with open(out_kde) as fh:
+        reader = csv.reader(fh, delimiter="\t")
+        for row in reader:
+            result.extend(row)
+    # Empty TSV
+    if len(result) == 2:
+        assert result == expected
+    # Has values
+    else:
+        # Matching headers
+        assert result[:2] == expected[:2]
+        # Pairup values and assert floats are similar to each other
+        for exp, kde in zip(expected[2:], list(map(float, result[2:]))):
+            assert np.isclose(exp, kde)
+
+
 def test_too_close_too_end(short_subtelo_bam):
     """Test the too close too end for reads which have short sub telomere."""
     count_classifications = Counter()
     for record in short_subtelo_bam:
         b, c = find_telo_boundary(
-            record, TELOMERE_MOTIF,
+            record,
+            TELOMERE_MOTIF,
             filter_width=10,
             min_repeats=100,
             start_window=0.3,
             start_repeats=0.8,
             min_qual_non_telo=9,
-            post_boundary_ccc_threshold=0.25
+            post_boundary_ccc_threshold=0.25,
         )
         count_classifications[c.value] += 1
     # These reads should be Good, were taken from Chr5,
@@ -227,9 +291,7 @@ def test_main(capsys, tmp_path):
 
     args = Mock()
 
-    args.input_bam = str(
-        (SCRIPT_DIR / "static" / "test_main.bam").resolve()
-    )
+    args.input_bam = str((SCRIPT_DIR / "static" / "test_main.bam").resolve())
     args.output_bam = "/dev/null"
     args.summary_tsv_name = summary_tsv
     args.sample = "TEST"
@@ -248,6 +310,12 @@ def test_main(capsys, tmp_path):
     main(args)
     captured = capsys.readouterr()
     # Added a read that gets trimmed:
-    assert "Skipping read d89f9da1-cc54-414e-b014-e1fcb053cd4b, as it has no sequence left" in captured.err  # noqa: E501
-    assert "Good: 26, TelomericOnly: 29, TooCloseEnd: 34, TooErrorful: 19, StartNotRepeats: 5, TooShort: 41, TooFewRepeats: 32, LowQuality: 11" in captured.err  # noqa: E501
+    assert (
+        "Skipping read d89f9da1-cc54-414e-b014-e1fcb053cd4b, as it has no sequence left"
+        in captured.err
+    )
+    assert (
+        "Good: 26, TelomericOnly: 29, TooCloseEnd: 34, TooErrorful: 19, StartNotRepeats: 5, TooShort: 41, TooFewRepeats: 32, LowQuality: 11"  # noqa: E501
+        in captured.err
+    )
     assert summary_tsv.exists()
