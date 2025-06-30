@@ -259,6 +259,31 @@ def trim_adapters(
     return record
 
 
+def calculate_kde(values, outfile, **kwargs):
+    """Calculate a KDE for the provided boundaries.
+
+    KDE values are saved to a TSV to the filepath provided.
+    If `values` is empty or contains only a single unique value,
+    an empty TSV is written out.
+    Kwargs are passed through to the underlying KDE function.
+
+    :param values: Series of values to estimate Kernel density from
+    :param outfile: File path to write KDE points into. Output data is Tab separated.
+    """
+    data = np.array([])
+    if len(set(values)) > 1:
+        kde_x, kde_y = kernel_density_estimate(values, **kwargs)
+        data = np.column_stack((kde_x, kde_y))
+
+    np.savetxt(
+        outfile,
+        data,
+        delimiter='\t',
+        header="length\tdensity",
+        comments=''
+    )
+
+
 def main(args):
     """Process input file to find telomere boundaries."""
     barcodes = BARCODES
@@ -344,20 +369,7 @@ def main(args):
             boundaries.append(boundary)
             qualities.append(np.mean(record.query_qualities))
 
-    if boundaries:
-        kde_x, kde_y = kernel_density_estimate(boundaries)
-        data = np.column_stack((kde_x, kde_y))
-        np.savetxt(
-            args.kde_tsv_name,
-            data,
-            delimiter='\t',
-            header="length\tdensity",
-            comments=''
-        )
-    else:
-        # Write out empty TSV
-        with open(args.kde_tsv_name, "w") as fh:
-            fh.write("length\tdensity")
+    calculate_kde(boundaries, outfile=args.kde_tsv_name)
 
     # Write the summary metrics out for use in report.
     summary_data = ts_utils.process_telomere_stats(pd.Series(boundaries))
