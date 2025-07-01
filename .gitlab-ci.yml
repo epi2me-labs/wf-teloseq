@@ -26,7 +26,8 @@ docker-run:
           "missing_reference",
           "sample_sheet_same",
           "sample_sheet_diff",
-          "one_invalid_sample"
+          "one_invalid_sample",
+          "sort_sample"
         ]
   # TODO Add in trim and barcode specific tests to check that is passed through
   rules:
@@ -59,3 +60,10 @@ docker-run:
     - if: $MATRIX_NAME == "one_invalid_sample"
       variables:
         NF_WORKFLOW_OPTS: "--bam test_data/samples_one_invalid --sample_sheet test_data/sample_sheet_different_ref.csv --alignment_threads 2"  
+    - if: $MATRIX_NAME == "sort_sample"
+      variables:
+        NF_WORKFLOW_OPTS: "--bam test_data/test_sorting_sample --alignment_threads 2"  
+        AFTER_NEXTFLOW_CMD: >
+          for i in barcode{01..12}; do
+            cmp wf-teloseq/$${i}/unaligned_data/fastcat_stats/length.hist test_data/test_sorting_sample/$${i}/length.hist;
+          done
