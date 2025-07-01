@@ -79,12 +79,14 @@ def main(args):
         valid_samples = [
             (sample_alias, fastcat_dir)
             for sample_alias, fastcat_dir in zip(
-                sample_input_order, sorted(args.fastcat_stats_dir.iterdir())
+                # natsort the staged_ dirs to correctly zip the metadata.json
+                # sample order to the stats dirs
+                sample_input_order, natsort.natsorted(args.fastcat_stats_dir.iterdir())
             )
         ]
         if valid_samples:
             sample_ids, stats_dirs = zip(*valid_samples)
-        SeqSummary(stats_dirs, sample_names=sample_ids)
+            SeqSummary(seq_summary=stats_dirs, sample_names=sample_ids)
 
     if list(args.qc_stats_dir.rglob("*.tsv")):
         with report.add_section("Filtering outcomes", "Filtering outcomes"):
@@ -143,7 +145,7 @@ def main(args):
                             for label, description in definitions:
                                 status_list += tags.li(
                                     tags.b(label), " - ", description
-                                )  # noqa: E501
+                                )
 
     else:
         tags.p("No QC statistics file was found.")
@@ -359,7 +361,7 @@ def argparser():
     )
     parser.add_argument(
         "--fastcat-stats-dir", type=Path, default=None,
-        help="Directory containing the fastcat derived statistics for this workflow."
+        help="Directory of staged fastcat stats output directories."
     )
     parser.add_argument(
         "--qc-stats-dir", type=Path, default=None,

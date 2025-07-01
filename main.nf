@@ -52,14 +52,14 @@ process makeReport {
         path "params.json"
         path unaligned_stats, stageAs: "unaligned_stats/*"
         path kde_stats, stageAs: "kde_stats/*"
-        path fastcat_stats, stageAs: "fastcat_stats/sample_*"
+        path fastcat_stats_dirs, stageAs: "fastcat_stats/staged_*"
         path qc_stats, stageAs: "qc_stats/*"
         path contig_stats, stageAs: "contig_stats/*"
         path boxplot_stats, stageAs: "boxplot_stats/*"
     output:
-        path "wf-teloseq-*.html"
+        path "${report_name}"
     script:
-        String report_name = "wf-teloseq-report.html"
+        report_name = "wf-teloseq-report.html"  // nodef: used by output
         def simplified_meta = meta_array.collect { meta ->
             [
                 alias: meta.alias,
@@ -73,6 +73,7 @@ process makeReport {
         }
         def json_str = new groovy.json.JsonBuilder(simplified_meta).toPrettyString()
 
+
         """
         echo '${json_str}' > metadata.json
         workflow-glue report $report_name \\
@@ -82,7 +83,7 @@ process makeReport {
             --workflow-version v${workflow.manifest.version} \\
             --unaligned-stats-dir unaligned_stats \\
             --kde-stats-dir kde_stats \\
-            --fastcat-stats fastcat_stats \\
+            --fastcat-stats-dir fastcat_stats \\
             --qc-stats-dir qc_stats \\
             --contig-stats-dir contig_stats \\
             --boxplot-stats-dir boxplot_stats
@@ -195,13 +196,13 @@ workflow pipeline {
         }
 
         makeReport(
-            metadata_ch | collect,
+            metadata_ch.toList(),
             software_versions,
             software_version_common,
             workflow_params,
             unaligned_ch | collect,
             kde_ch | collect,
-            fastcat_stats_ch | collect,
+            fastcat_stats_ch.toList(),
             qc_stats_ch | collect,
             contig_stats_ch | collect,
             boxplot_stats_ch | collect
