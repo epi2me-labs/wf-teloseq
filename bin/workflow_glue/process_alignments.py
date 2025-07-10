@@ -135,7 +135,7 @@ def main(args):
         .apply(pd.Series)
     )
     boxplot_data = boxplot_data.loc[natsort.natsorted(boxplot_data.index)]
-    boxplot_data.to_csv(args.boxplot_tsv_name, sep="\t")
+    boxplot_data.to_csv(args.base_stats_dir / args.boxplot_tsv_name, sep="\t")
     # Compute summary stats for all data
     summary_data = ts_utils.process_telomere_stats(df_good_reads["telomere_length"])
     if summary_data is not None:
@@ -143,7 +143,7 @@ def main(args):
     else:
         summary_data = pd.DataFrame([])
     summary_data.to_csv(
-        args.summary_tsv_name, index=False, sep="\t",
+        args.base_stats_dir / args.summary_tsv_name, index=False, sep="\t",
         float_format="%.2f"
     )
 
@@ -153,7 +153,9 @@ def main(args):
     )["telomere_length"].apply(ts_utils.process_telomere_stats)
     # Handle case where there are no stats
     if per_contig_summary_df.empty:
-        pd.DataFrame([]).to_csv(args.contig_summary_tsv_name, index=False, sep="\t")
+        pd.DataFrame([]).to_csv(
+            args.base_stats_dir / args.contig_summary_tsv_name, index=False, sep="\t"
+        )
     else:
         per_contig_summary_df.rename(
             columns={"reference_name": "Contig name"}, inplace=True
@@ -162,7 +164,7 @@ def main(args):
             "Contig name", inplace=True, key=natsort.natsort_key
         )
         per_contig_summary_df.to_csv(
-            args.contig_summary_tsv_name, index=False, sep="\t"
+            args.base_stats_dir / args.contig_summary_tsv_name, index=False, sep="\t"
         )
 
     # QC modes for reads - what about if there is no data
@@ -201,7 +203,7 @@ def main(args):
     # Order the df
     qc_df = qc_df.sort_values(by="qc")
     qc_df.to_csv(
-        args.qc_tsv_name,
+        args.base_stats_dir / args.qc_tsv_name,
         index=False,
         header=[
             "Status", "Total reads", "Median read length",
@@ -226,6 +228,10 @@ def argparser():
     )
     parser.add_argument(
         "--output-bam", default=sys.stdout, help="Output BAM filename.",
+    )
+    parser.add_argument(
+        "--base-stats-dir", type=Path, default="stats",
+        help="Output directory for statistics files.",
     )
     parser.add_argument(
         "--summary-tsv-name", type=Path, default="summary_stats.tsv",

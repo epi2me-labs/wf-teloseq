@@ -45,6 +45,35 @@ def _format_dataframes(
     return dataframe
 
 
+def check_for_stats_file(stats_dir, sub_dir, stats_file):
+    """Check for the presence of a stats data file in `stats_dir`.
+
+    Returns True if there is at least one TSV file of that type.
+    `stats_file` should be one of the following values:
+    "kde", "boxplot", "contig", "qc", "unaligned"
+
+    :param stats_dir: The top directory containing all staged stats directories
+    :param sub_dir: Sub directory in the staged directory
+    :param stats_file: The type of file to check for. For example
+      `kde_stats`, `boxplot_stats`.
+    """
+    possible_types = {"kde", "boxplot", "contig", "qc", "unaligned"}
+    if stats_file not in possible_types:
+        raise ValueError(f"{stats_file} should be one of {possible_types}")
+    # rglob doesn't follow symlinks, but the iterdir path does - so go
+    # into the symlinked staged directory and check if the data file exists
+    # Return true at the first one we find under the assumption that if one sample
+    # has this data all samples must
+    return any(
+        (
+            bool(
+                tuple((p / sub_dir).rglob(f"*{stats_file}*.tsv"))
+            )
+            for p in stats_dir.iterdir()
+        )
+    )
+
+
 def main(args):
     """Run the entry point."""
     logger = get_named_logger("Report")
@@ -64,7 +93,22 @@ def main(args):
         meta = json.load(f)
         sample_input_order = [m["alias"] for m in meta]
         sample_human_order = natsort.natsorted(sample_input_order)
-
+    root_dir = Path(".")
+    stats_dir = args.report_stats_dir
+    # Natsorting here is vital - previously this was not naturally sorted
+    # which led to samples and fastcat stats directories being mismatched [CW-6342]
+    # (Order of staged directories would no longer match order of meta array)
+    sample_to_staged_dir = dict(
+        zip(
+            sample_input_order,
+            natsort.natsorted(
+                [
+                    p for p in root_dir.iterdir()
+                    if p.is_dir() and "staged" in p.name
+                ]
+            )
+        )
+    )
     with report.add_section("Read summary", "Read summary"):
         tags.p(
             f"""
@@ -77,18 +121,14 @@ def main(args):
 
         # Filter both sample_ids and stats_dirs to ensure they match
         valid_samples = [
-            (sample_alias, fastcat_dir)
-            for sample_alias, fastcat_dir in zip(
-                # natsort the staged_ dirs to correctly zip the metadata.json
-                # sample order to the stats dirs
-                sample_input_order, natsort.natsorted(args.fastcat_stats_dir.iterdir())
-            )
+            (sample_alias, f"{stats_dir}/fastcat_stats")
+            for sample_alias, stats_dir in sample_to_staged_dir.items()
         ]
         if valid_samples:
             sample_ids, stats_dirs = zip(*valid_samples)
             SeqSummary(seq_summary=stats_dirs, sample_names=sample_ids)
 
-    if list(args.qc_stats_dir.rglob("*.tsv")):
+    if check_for_stats_file(root_dir, stats_dir, "qc"):
         with report.add_section("Filtering outcomes", "Filtering outcomes"):
             tags.p(
                 """
@@ -118,7 +158,7 @@ def main(args):
                         "grid-row-gap: 20px",
                     )
                     with Grid(columns=None, styles=igrid):
-                        file_path = args.qc_stats_dir / f"{sample}_qc_modes_metrics.tsv"
+                        file_path = sample_to_staged_dir[sample] / stats_dir / f"{sample}_qc_modes_metrics.tsv"  # noqa: E501
                         df = pd.read_csv(file_path, sep="\t")
                         df = _format_dataframes(
                             df, thousand_sep_columns=["Median read length"]
@@ -148,9 +188,9 @@ def main(args):
                                 )
 
     else:
-        tags.p("No QC statistics file was found.")
+        tags.p("No QC statistics files were found.")
     # Check we have files to display
-    if list(args.unaligned_stats_dir.rglob("*.tsv")):
+    if check_for_stats_file(root_dir, stats_dir, "unaligned"):
         with report.add_section(
             "Alignment-free telomere measurements",
             "Alignment-free telomere measurements"
@@ -170,7 +210,7 @@ def main(args):
             dfs = []
             for sample in sample_human_order:
                 unaligned_file_path = (
-                    args.unaligned_stats_dir /
+                    sample_to_staged_dir[sample] / stats_dir /
                     f"{sample}_telomere_unaligned_metrics.tsv"
                 )
                 dfs.append(pd.read_csv(unaligned_file_path, sep="\t"))
@@ -186,7 +226,7 @@ def main(args):
                     df, use_index=False, searchable=False, paging=False
                 )
 
-    if list(args.kde_stats_dir.rglob("*.tsv")):
+    if check_for_stats_file(root_dir, stats_dir, "kde"):
         with report.add_section(
             "Single molecule telomere lengths",
             (
@@ -204,7 +244,7 @@ def main(args):
             tabs = Tabs()
             for sample in sample_human_order:
                 with tabs.add_tab(sample):
-                    kde_file_path = args.kde_stats_dir / f"{sample}_kde_data.tsv"
+                    kde_file_path = sample_to_staged_dir[sample] / stats_dir / f"{sample}_kde_data.tsv"  # noqa: E501
                     df = pd.read_csv(kde_file_path, sep="\t")
                     if df.empty:
                         tags.p(
@@ -222,7 +262,7 @@ def main(args):
                         EZChart(plt)
 
     # Check we have files to display
-    if list(args.contig_stats_dir.rglob("*.tsv")):
+    if check_for_stats_file(root_dir, stats_dir, "contig"):
         with report.add_section(
             "Aligned telomere lengths per contig", "Per contig summary"
         ):
@@ -246,7 +286,7 @@ def main(args):
                         # At this point there HAS to be only one file for this sample
                         # Fun little unpacking trick
                         contig_file_path = (
-                            args.contig_stats_dir /
+                            sample_to_staged_dir[sample] / stats_dir /
                             f"{sample}_contig_telomere_aligned_metrics.tsv"
                         )
                         df = pd.read_csv(contig_file_path, sep="\t")
@@ -258,7 +298,7 @@ def main(args):
                                 (check Filtering outcomes table for absence of "Good"
                                 reads), or there were no primary alignments.""")
 
-    if list(args.boxplot_stats_dir.rglob("*.tsv")):
+    if check_for_stats_file(root_dir, stats_dir, "boxplot"):
         with report.add_section(
             "Aligned telomere length boxplots", "Aligned telomere length boxplots"
         ):
@@ -272,7 +312,7 @@ def main(args):
             for sample in sample_human_order:
                 with tabs.add_tab(sample):
                     boxplot_data_file_path = (
-                        args.boxplot_stats_dir /
+                        sample_to_staged_dir[sample] / stats_dir /
                         f"{sample}_boxplot_values.tsv"
                     )
                     df = pd.read_csv(boxplot_data_file_path, sep="\t")
@@ -352,28 +392,8 @@ def argparser():
         help="The version of the workflow run to generate this report.",
     )
     parser.add_argument(
-        "--unaligned-stats-dir", type=Path, default=None,
-        help="Directory containing the unaligned stats TSVs for this workflow.",
-    )
-    parser.add_argument(
-        "--kde-stats-dir", type=Path, default=None,
-        help="Directory containing the kde density TSVs for unaligned stats.",
-    )
-    parser.add_argument(
-        "--fastcat-stats-dir", type=Path, default=None,
-        help="Directory of staged fastcat stats output directories."
-    )
-    parser.add_argument(
-        "--qc-stats-dir", type=Path, default=None,
-        help="Directory containing the qc TSV files.",
-    )
-    parser.add_argument(
-        "--contig-stats-dir", type=Path, default=None,
-        help="Directory containing the qc TSV files.",
-    )
-    parser.add_argument(
-        "--boxplot-stats-dir", type=Path, default=None,
-        help="Directory containing the boxplot aggregated data TSV files.",
+        "--report-stats-dir", default=Path("stats"), type=Path,
+        help="Sub directory name containing stats TSV files.",
     )
 
     return parser

@@ -33,7 +33,7 @@
       "type": "per-sample"
     },
     "unaligned-metrics": {
-      "filepath": "{{alias}}/unaligned_data/{{alias}}_telomere_unaligned_metrics.tsv",
+      "filepath": "{{alias}}/stats/{{alias}}_telomere_unaligned_metrics.tsv",
       "title": "Summary metrics about detected telomere lengths within the sample.",
       "description": "Aggregated summary metrics about reads which have passed all filtering, with a detected telomere repeat boundary.",
       "mime-type": "text/tsv",
@@ -57,7 +57,7 @@
       "type": "per-sample"
     },
     "aligned-metrics": {
-      "filepath": "{{alias}}/aligned_data/{{alias}}_telomere_aligned_metrics.tsv",
+      "filepath": "{{alias}}/stats/{{alias}}_telomere_aligned_metrics.tsv",
       "title": "Summary metrics about aligned telomere lengths within the sample.",
       "description": "Aggregated summary metrics about detected telomere lengths within the sample, after alignment. Only reads which have primary alignments to the reference are considered.",
       "mime-type": "text/tsv",
@@ -65,7 +65,7 @@
       "type": "per-sample"
     },
     "aligned-contig-metrics": {
-      "filepath": "{{alias}}/aligned_data/{{alias}}_contig_telomere_aligned_metrics.tsv",
+      "filepath": "{{alias}}/stats/{{alias}}_contig_telomere_aligned_metrics.tsv",
       "title": "Summary metrics about aligned telomere lengths grouped by target contig.",
       "description": "Aggregated summary metrics about detected telomere lengths within the sample, after alignment. The reads are grouped by target contig, and only reads which have primary alignments to the reference are considered.",
       "mime-type": "text/tsv",
@@ -73,9 +73,25 @@
       "type": "per-sample"
     },
     "qc-mode-summary-metrics": {
-      "filepath": "{{alias}}/aligned_data/{{alias}}_qc_modes_metrics.tsv",
+      "filepath": "{{alias}}/stats/{{alias}}_qc_modes_metrics.tsv",
       "title": "Summary metrics about the filtering status of each read.",
       "description": "Aggregated summary metrics of the filtering status of each read. Metrics displayed for each filtering status include count, mean Q score, length, and alignment identity (where applicable).",
+      "mime-type": "text/tsv",
+      "optional": true,
+      "type": "per-sample"
+    },
+    "kde-datapoints": {
+      "filepath": "{{alias}}/stats/{{alias}}_kde_data.tsv",
+      "title": "Telomere length KDE data points.",
+      "description": "Equally spaced data points drawn from a KDE. The KDE is drawn from the calculated telomere lengths.",
+      "mime-type": "text/tsv",
+      "optional": true,
+      "type": "per-sample"
+    },
+    "boxplot-data": {
+      "filepath": "{{alias}}/stats/{{alias}}_boxplot_values.tsv",
+      "title": "Data points for drawing a boxplot from calculated telomere lengths.",
+      "description": "Data points for drawing a boxplot from calculated telomere lengths for a single sample. Only provided if alignment is performed. Each row represents a contig, containing the minimum (greater than median - 1.5 * IQR), Q1, Median, Q3, and Max (smaller than median + 1.5 * IQR).",
       "mime-type": "text/tsv",
       "optional": true,
       "type": "per-sample"

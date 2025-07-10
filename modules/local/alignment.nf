@@ -8,22 +8,22 @@ process align_and_process {
         pattern: "*.bam*"
     )
     publishDir (
-        path: "${params.out_dir}/${meta.alias}/aligned_data/",
+        path: "${params.out_dir}/${meta.alias}/",
         mode: "copy",
-        pattern: "*_metrics.tsv"
+        pattern: "*stats*"
     )
 
     input:
-        tuple val(meta), path("reads.fastq"), path("reference.fasta"), path(stats)
+        tuple val(meta), path("reads.fastq"), path("reference.fasta"), path("stats")
     output:
         tuple val(meta), path("${output_bam}"), path("${output_bam}.csi"), emit: alignments
-        tuple val(meta), path(stats), path("${summary_stats}"), path("${boxplot_stats}"), path("${qc_stats}"), path("${contig_stats}"), emit: alignment_stats
+        tuple val(meta), path("stats"), emit: stats
     script:
-        summary_stats = "${meta.alias}_telomere_aligned_metrics.tsv";
-        boxplot_stats = "${meta.alias}_boxplot_values.tsv";
-        qc_stats = "${meta.alias}_qc_modes_metrics.tsv";
-        contig_stats = "${meta.alias}_contig_telomere_aligned_metrics.tsv";
-        output_bam = "${meta.alias}_aligned_filtered_teloseqs.bam";
+        def summary_stats = "${meta.alias}_telomere_aligned_metrics.tsv";
+        def boxplot_stats = "${meta.alias}_boxplot_values.tsv";
+        def qc_stats = "${meta.alias}_qc_modes_metrics.tsv";
+        def contig_stats = "${meta.alias}_contig_telomere_aligned_metrics.tsv";
+        output_bam = "${meta.alias}_aligned_filtered_teloseqs.bam";  // nodef: used by output and glue
         """
         minimap2 -yax lr:hq --secondary=no -t ${task.cpus} --cap-kalloc 100m --cap-sw-mem 50m reference.fasta reads.fastq | samtools view -ubh | \\
             samtools sort -u - | \\
@@ -33,6 +33,7 @@ process align_and_process {
                 --boxplot-tsv-name ${boxplot_stats} \\
                 --contig-summary-tsv-name ${contig_stats} \\
                 --output-bam ${output_bam} \\
+                --base-stats-dir stats \\
                 ${meta.alias} \\
                 -
         """
