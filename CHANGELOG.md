@@ -8,10 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Unreleased
 ### Changed
 - Updated to wf-template v5.6.2 to maintain compliance with our latest wf-template standard: this does not impact the workflow.
+- Files containing statistics used in the report are now published to `{{ alias }}/stats/`. This change does not affect the contents of the HTML reports or output files.
 
 ### Fixed
+- Applying `--skip_mapping` to multiple samples led to a crash during report generation due to filename collisions.
 - Sample plots were previously linked to incorrect barcodes in the 'Read summary plots' dropdown selector of the report. This issue has been fixed, and the plots are now correctly associated with their respective sample aliases. This fix does not alter report plotting, only the sample dropdown ordering.
 - KDE calculations previously crashed the workflow when only a single read passed filtering. This issue has now been handled, and KDE plots will only display when two or more reads pass filtering and have different lengths.
+- Missing output files from workflow output file definitions schema.
 
 ## [v1.0.0]
 

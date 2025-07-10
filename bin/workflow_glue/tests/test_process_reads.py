@@ -288,12 +288,13 @@ def test_main(capsys, tmp_path):
     # oblivion afterwards
     os.chdir(tmp_path)
     summary_tsv = tmp_path / "summary.tsv"
-
+    kde_tsv = tmp_path / "kde.tsv"
     args = Mock()
 
     args.input_bam = str((SCRIPT_DIR / "static" / "test_main.bam").resolve())
     args.output_bam = "/dev/null"
     args.summary_tsv_name = summary_tsv
+    args.kde_tsv_name = kde_tsv
     args.sample = "TEST"
     args.filter_width = 10
     args.min_repeats = 100
@@ -305,6 +306,7 @@ def test_main(capsys, tmp_path):
     args.max_errors = 5
     args.error_distance = 500
     args.post_boundary_ccc_threshold = 0.25
+    args.base_stats_dir = "stats"
 
     # Run main function
     main(args)

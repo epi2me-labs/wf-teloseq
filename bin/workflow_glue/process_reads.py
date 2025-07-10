@@ -369,14 +369,14 @@ def main(args):
             boundaries.append(boundary)
             qualities.append(np.mean(record.query_qualities))
 
-    calculate_kde(boundaries, outfile=args.kde_tsv_name)
+    calculate_kde(boundaries, outfile=args.base_stats_dir / args.kde_tsv_name)
 
     # Write the summary metrics out for use in report.
     summary_data = ts_utils.process_telomere_stats(pd.Series(boundaries))
     if summary_data is not None:
         summary_data.insert(0, "Sample", args.sample)
         summary_data.to_csv(
-            args.summary_tsv_name,
+            args.base_stats_dir / args.summary_tsv_name,
             index=False,
             sep="\t",
             float_format="%.2f",
@@ -385,7 +385,7 @@ def main(args):
         # No reads passed filtering, so to include in final report table
         # We write out a TSV which indicates that.
         pd.DataFrame([(args.sample, 0, 0, 0, 0, 0, 0, 0)]).to_csv(
-            args.summary_tsv_name, sep="\t", index=False,
+            args.base_stats_dir / args.summary_tsv_name, sep="\t", index=False,
             header=[
                 "Sample",
                 "Read count",
@@ -418,6 +418,10 @@ def argparser():
     parser.add_argument(
         "--kde-tsv-name", type=Path, default="kde_stats.tsv",
         help="Name of KDE data TSV file to output.",
+    )
+    parser.add_argument(
+        "--base-stats-dir", type=Path, default="stats",
+        help="Output directory for statistics files.",
     )
 
     # Motif and read filtering

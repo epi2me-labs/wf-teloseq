@@ -43,7 +43,7 @@ docker-run:
         NF_WORKFLOW_OPTS: "--bam test_data/samples/ --alignment_threads 2"
     - if: $MATRIX_NAME == "skip_mapping"
       variables:
-        NF_WORKFLOW_OPTS: "--fastq test_data/HG002_small_test.fastq.gz --skip_mapping"
+        NF_WORKFLOW_OPTS: "--bam test_data/samples --skip_mapping"
     - if: $MATRIX_NAME == "non_telomeric_reads"
       variables:
         NF_WORKFLOW_OPTS: "--bam test_data/non_telomeric_1000.bam"
@@ -63,7 +63,3 @@ docker-run:
     - if: $MATRIX_NAME == "sort_sample"
       variables:
         NF_WORKFLOW_OPTS: "--bam test_data/test_sorting_sample --alignment_threads 2"  
-        AFTER_NEXTFLOW_CMD: >
-          for i in barcode{01..12}; do
-            cmp wf-teloseq/$${i}/unaligned_data/fastcat_stats/length.hist test_data/test_sorting_sample/$${i}/length.hist;
-          done

@@ -67,6 +67,7 @@ def test_main(tmp_path):
     args.contig_summary_tsv_name = contig_summary_tsv
     args.identity_threshold = 0.8
     args.mapq_threshold = 20
+    args.base_stats_dir = "stats"
 
     main(args)
 

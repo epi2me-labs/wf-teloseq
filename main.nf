@@ -43,23 +43,20 @@ process makeReport {
     memory '2 GB'
     publishDir (
         params.out_dir,
-        mode: "move",
+        mode: "copy",
+        pattern: "${report_name}"
     )
     input:
         val meta_array
         path "versions/*"
         path "versions/*"
         path "params.json"
-        path unaligned_stats, stageAs: "unaligned_stats/*"
-        path kde_stats, stageAs: "kde_stats/*"
-        path fastcat_stats_dirs, stageAs: "fastcat_stats/staged_*"
-        path qc_stats, stageAs: "qc_stats/*"
-        path contig_stats, stageAs: "contig_stats/*"
-        path boxplot_stats, stageAs: "boxplot_stats/*"
+        path(stats, stageAs: "staged_*/stats")
+        path(fastcat_stats, stageAs: "staged_*/fastcat_stats")
     output:
         path "${report_name}"
     script:
-        report_name = "wf-teloseq-report.html"  // nodef: used by output
+        report_name = "wf-teloseq-report.html"  // nodef: used by output and publishDir
         def simplified_meta = meta_array.collect { meta ->
             [
                 alias: meta.alias,
@@ -72,8 +69,6 @@ process makeReport {
             ]
         }
         def json_str = new groovy.json.JsonBuilder(simplified_meta).toPrettyString()
-
-
         """
         echo '${json_str}' > metadata.json
         workflow-glue report $report_name \\
@@ -81,12 +76,7 @@ process makeReport {
             --versions versions \\
             --params params.json \\
             --workflow-version v${workflow.manifest.version} \\
-            --unaligned-stats-dir unaligned_stats \\
-            --kde-stats-dir kde_stats \\
-            --fastcat-stats-dir fastcat_stats \\
-            --qc-stats-dir qc_stats \\
-            --contig-stats-dir contig_stats \\
-            --boxplot-stats-dir boxplot_stats
+            --report-stats-dir stats
         """
 }
 
@@ -100,15 +90,18 @@ workflow generic_preprocessing {
         filtered_samples = process_reads(samples)
 
         valid_samples_with_stats = filtered_samples
-            .map { meta, sub_telomeric_fastq_file, length_sum, kde_sum, stats_dir ->
+            .map { meta, sub_telomeric_fastq_file, fastcat_stats_dir, stats_files_dir ->
+                if (!meta.containsKey('reference')) {
+                    meta.reference = params.reference
+                }
                 if (sub_telomeric_fastq_file.size() == 0) {
                      log.warn "SAMPLE: ${meta.alias} contains no valid sequences, removed from analysis..."
                 }
                 else {
-                    [meta, sub_telomeric_fastq_file, length_sum, kde_sum, stats_dir]
+                    [meta, sub_telomeric_fastq_file, fastcat_stats_dir, stats_files_dir]
                 }
             }
-            .filter { _meta, sub_telomeric_fastq_file, _length_sum, _kde_sum, _stats_dir ->
+            .filter { _meta, sub_telomeric_fastq_file, _fastcat_stats_dir, _stats_files_dir ->
                 sub_telomeric_fastq_file.size() > 0
             }
             .ifEmpty {
@@ -138,74 +131,45 @@ workflow pipeline {
         per_sample_stats = preprocessing.valid_samples_with_stats
 
         if (!params.skip_mapping) {
+            per_sample_files = per_sample_stats.multiMap {
+                meta, reads, fastcat_stats_dir, stats_files_dir ->
+                analysis_files: [meta, reads, file(meta.reference), stats_files_dir]
+                fastcat_stats_dirs: [meta, fastcat_stats_dir]
+
+            }
             // map filtered telomere reads to genome
-            aligned_outputs = align_and_process(per_sample_stats.map{items -> 
-                def meta = items[0]
-                def reads = items[1]
-                // Collect statistics files from fastcat and preprocessing
-                def stats_files = items[2..-1]
-                // Use default reference if user hasn't set one 
-                if (!meta.containsKey('reference')) {
-                    meta.reference = params.reference
-                }
-                [meta, reads, file(meta.reference), stats_files]
-            })
-            analysis_files_for_collection = aligned_outputs.alignment_stats
+            aligned_outputs = align_and_process(per_sample_files.analysis_files)
+            // Rejoin fastcat stats onto aligned output amd reorder tuple to match structure
+            // if no alignment is performed
+            analysis_files_for_collection = aligned_outputs.stats.join(
+                per_sample_files.fastcat_stats_dirs, by: 0
+            ).map {
+                meta, stats_files_dir, fastcat_stats_dir ->
+                [meta, fastcat_stats_dir, stats_files_dir]
+            }
         } else {
-            // map to get only stats files out -> matches to alignment output
-            analysis_files_for_collection = per_sample_stats.map{ meta, _sub_telomeric_fastq_file, length_sum, kde_stats, stats_dir -> 
-                [meta, length_sum, kde_stats, stats_dir]
+            // map to get only stats files output -> matches same tuple structure as alignment output
+            analysis_files_for_collection = per_sample_stats.map { meta, _sub_telomeric_fastq_file, fastcat_stats_dir, stats_files_dir -> 
+                [meta, fastcat_stats_dir, stats_files_dir]
             }
         }
-        // Sort files from output tuple into individual channels so they can be collected and staged in report working directory.
-        // We use the whole `items` tuple as we don't know how many files are contained.
-        // If alignment is performed it will contain extra stats files.
-        // Finally, we use the order of samples in the collected metadata_ch to match up to the order of the fastcat_stats directories staged in `makeReport`.
-        (
-            metadata_ch,
-            unaligned_ch,
-            kde_ch,
-            fastcat_stats_ch,
-            boxplot_stats_ch,
-            qc_stats_ch,
-            contig_stats_ch
-        ) = analysis_files_for_collection.multiMap { items ->
-            def meta = items[0]
-
-            // The fastcat and preprocessing stats files are nested, so flatten everything out
-            def stats_files = items[1..-1].flatten()
-            // These files are only output if alignment is performed, set a default.
-            def boxplot_stats = OPTIONAL_FILE
-            def qc_stats = OPTIONAL_FILE
-            def contig_summary_stats = OPTIONAL_FILE
-            //  Alignment was performed, set stats files paths for report.
-            if (!params.skip_mapping) {
-                  boxplot_stats = stats_files[4]
-                  qc_stats = stats_files[5]
-                  contig_summary_stats = stats_files[6]
-            }
-
-            // Return file elements
-            metadata_ch: meta
-            unaligned_stats_ch: stats_files[0]
-            kde_ch: stats_files[1]
-            fastcat_stats_ch: stats_files[2]
-            boxplot_stats_ch: boxplot_stats
-            qc_stats_ch: qc_stats
-            contig_summary_stats_ch: contig_summary_stats
+        // Split out the metadata, fastcat stats directories and stats directories into seperate channels under the 
+        // report_data umbrella
+        // Use the order of sample elements in the `metadata` tuple to match up to the
+        // order of the `fastcat_stats` and `stats` directories after staging in `makeReport`.
+        report_data = analysis_files_for_collection.multiMap { meta, fastcat_stats, stats ->
+            metadata: meta
+            fastcat_stats: fastcat_stats
+            stats: stats
         }
 
         makeReport(
-            metadata_ch.toList(),
+            report_data.metadata.toList(),
             software_versions,
             software_version_common,
             workflow_params,
-            unaligned_ch | collect,
-            kde_ch | collect,
-            fastcat_stats_ch.toList(),
-            qc_stats_ch | collect,
-            contig_stats_ch | collect,
-            boxplot_stats_ch | collect
+            report_data.stats.toList(),
+            report_data.fastcat_stats.toList()
         )
 
 }
