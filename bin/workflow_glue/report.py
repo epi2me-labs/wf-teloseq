@@ -140,8 +140,9 @@ def main(args):
                 tags.code("qc:Z:<Status>"),
                 ". Passing reads are tagged with the status: ",
                 tags.code("Good"),
-                ". Note that the median read length here is for the whole read, and "
-                "not the telomeric repeats. The identity used here is gap-compressed"
+                ". Note that the median read length here is for the whole read, "
+                "not just the telomeric repeat region. The identity used here "
+                "is the gap-compressed"
                 " identity, where a value of 1 represents a perfect alignment.",
             )
             tabs = Tabs()

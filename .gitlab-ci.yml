@@ -63,3 +63,9 @@ docker-run:
     - if: $MATRIX_NAME == "sort_sample"
       variables:
         NF_WORKFLOW_OPTS: "--bam test_data/test_sorting_sample --alignment_threads 2"  
+        # Test whether the read count in the QC TSV column is correct
+        AFTER_NEXTFLOW_CMD: >
+          ./test_data/scripts/expected_read_counts.sh;
+          for i in barcode{01..12}; do
+            cmp <( cut -f2 wf-teloseq/$${i}/stats/$${i}_qc_modes_metrics.tsv) test_data/$${i}.tsv;
+          done

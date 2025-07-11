@@ -81,11 +81,16 @@ def main(args):
             )
             # Only want to analyse good primary mappings
             analyse = False
+            # Record if row is primary alignment
+            is_primary = False
+            # If the row is unmapped
+            is_unmapped = record.flag & pysam.FUNMAP
             # de tag is the gap-compressed identity as assigned by minimap2
             # see https://lh3.github.io/2018/11/25/on-the-definition-of-sequence-identity  # noqa: E501
             # Only check identity for Primary alignments
             if not (record.flag & NOT_GOOD_PRIMARY):
                 identity = 1 - record.get_tag("de")
+                is_primary = True
                 if (
                     identity < args.identity_threshold or
                     record.mapping_quality < args.mapq_threshold
@@ -107,7 +112,9 @@ def main(args):
                     1 - get_tag_with_default(record, "de", 1),
                     record.get_tag("qc"),
                     mean_quality(record),
-                    analyse
+                    analyse,
+                    is_primary,
+                    is_unmapped
                 )
             )
     # Make all reads into a dataframe.
@@ -122,7 +129,9 @@ def main(args):
             "identity",
             "qc",
             "median_qual",
-            "analyse"
+            "analyse",
+            "is_primary",
+            "is_unmapped"
         ),
     )
 
@@ -169,17 +178,36 @@ def main(args):
 
     # QC modes for reads - what about if there is no data
     qc_df = df.set_index("read_id")
+    # Calculate median alignment identity on primary records
+    # OR umapped records in a QC status group
+    # This gives us the most relevant identities, as primary records
+    # are used to calculate other stats, but lots of unmapped reads
+    # will have QC statuses
+    identities = (
+        df[(df["is_primary"]) | (df["is_unmapped"])]
+        .groupby("qc")["identity"]
+        .agg("median")
+    )
+    # At this stage, we can have multiple rows per read in dataframe
+    # (primary + supplementary alignments)
+    # Drop multiple read_ids, so we have one row per read for
+    # Query length and quality stats. Doesn't matter if the record is supplementary
+    # or primary, as the underlying query record is the same and that's what we
+    # are analysing below
     qc_df = (
-        qc_df.loc[qc_df.index.drop_duplicates()]
+        qc_df.loc[~qc_df.index.duplicated(keep="first")]
         .groupby("qc", as_index=False)
         .agg(
             {
                 "query_length": ["size", "median"],
                 "median_qual": "median",
-                "identity": "median",
             }
         )
     )
+    # Set median identities for each QC type
+    qc_df = qc_df.set_index("qc")
+    qc_df["identity"] = identities
+    qc_df = qc_df.reset_index()
     # Round median
     qc_df[("query_length", "median")] = qc_df[
         ("query_length", "median")

@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Sample plots were previously linked to incorrect barcodes in the 'Read summary plots' dropdown selector of the report. This issue has been fixed, and the plots are now correctly associated with their respective sample aliases. This fix does not alter report plotting, only the sample dropdown ordering.
 - KDE calculations previously crashed the workflow when only a single read passed filtering. This issue has now been handled, and KDE plots will only display when two or more reads pass filtering and have different lengths.
 - Missing output files from workflow output file definitions schema.
+- Contents of Total Reads column in the QC status table. This column was previously showing the total number of alignments per QC state, and now displays the number of reads per QC state.
 
 ## [v1.0.0]
 
