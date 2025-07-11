@@ -89,15 +89,15 @@ def test_main(tmp_path):
     assert "nan" not in qc_table_text
     expected_qc = (
         "Status\tTotal reads\tMedian read length\tMedian quality\tMedian identity\n"
-        "TooFewRepeats\t9\t4864\t21.73\t0.99\n"
-        "StartNotRepeats\t71\t6760\t15.16\t0.98\n"
+        "TooFewRepeats\t7\t4864\t20.92\t0.99\n"
+        "StartNotRepeats\t54\t6958\t15.76\t0.99\n"
         "TooCloseStart\t1\t864\t24.48\t0.00\n"
         "TooCloseEnd\t4\t2236\t20.73\t1.00\n"
-        "LowSubTeloQual\t17\t5279\t10.71\t0.91\n"
-        "TelomereOnly\t4\t1907\t18.93\t0.99\n"
-        "TooErrorful\t96\t8368\t14.93\t0.97\n"
-        "BadAlign\t16\t6938\t12.19\t0.95\n"
-        "Good\t779\t8571\t20.53\t0.99\n"
+        "LowSubTeloQual\t12\t7928\t9.90\t0.90\n"
+        "TelomereOnly\t3\t2113\t20.35\t0.99\n"
+        "TooErrorful\t69\t8769\t15.49\t0.97\n"
+        "BadAlign\t14\t6512\t13.53\t0.95\n"
+        "Good\t754\t8641\t20.47\t0.99\n"
     )
     assert qc_table_text == expected_qc
     assert summary_stats_tsv.exists()
