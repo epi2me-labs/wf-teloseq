@@ -5,7 +5,9 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## Unreleased
+## [v1.0.1]
+This patch release of `wf-teloseq` fixes several bugs found in report generation, but does not affect the determination of telomere repeat boundaries.
+
 ### Changed
 - Updated to wf-template v5.6.2 to maintain compliance with our latest wf-template standard: this does not impact the workflow.
 - Files containing statistics used in the report are now published to `{{ alias }}/stats/`. This change does not affect the contents of the HTML reports or output files.
