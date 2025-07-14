@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - Updated to wf-template v5.6.2 to maintain compliance with our latest wf-template standard: this does not impact the workflow.
 - Files containing statistics used in the report are now published to `{{ alias }}/stats/`. This change does not affect the contents of the HTML reports or output files.
+- Renamed the `mean quality` column in the Filtering outcomes report section to `median Q score`. This column displays the median of all mean Q scores in that QC mode, and this name better reflects that.
 
 ### Fixed
 - Applying `--skip_mapping` to multiple samples led to a crash during report generation due to filename collisions.

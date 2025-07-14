@@ -39,8 +39,8 @@ def get_tag_with_default(record, tag, default=None):
         return default
 
 
-def mean_quality(record, trim=60):
-    """Calculate the mean quality of a read.
+def mean_qscore(record, trim=60):
+    """Calculate the mean Q score of a read from base qualities.
 
     :param trim: number of quality scores to trim from the start of the read,
         the default is to be equivalent to dorado.
@@ -111,7 +111,7 @@ def main(args):
                     record.get_tag("HP"),
                     1 - get_tag_with_default(record, "de", 1),
                     record.get_tag("qc"),
-                    mean_quality(record),
+                    mean_qscore(record),
                     analyse,
                     is_primary,
                     is_unmapped
@@ -128,7 +128,7 @@ def main(args):
             "haplotype",
             "identity",
             "qc",
-            "median_qual",
+            "mean_qscore",
             "analyse",
             "is_primary",
             "is_unmapped"
@@ -200,7 +200,7 @@ def main(args):
         .agg(
             {
                 "query_length": ["size", "median"],
-                "median_qual": "median",
+                "mean_qscore": "median",
             }
         )
     )
@@ -235,7 +235,7 @@ def main(args):
         index=False,
         header=[
             "Status", "Total reads", "Median read length",
-            "Median quality", "Median identity"
+            "Median Q score", "Median identity"
         ],
         float_format="%.2f",
         sep="\t",
