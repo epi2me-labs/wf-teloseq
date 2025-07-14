@@ -75,7 +75,7 @@
     "qc-mode-summary-metrics": {
       "filepath": "{{alias}}/stats/{{alias}}_qc_modes_metrics.tsv",
       "title": "Summary metrics about the filtering status of each read.",
-      "description": "Aggregated summary metrics of the filtering status of each read. Metrics displayed for each filtering status include count, mean Q score, length, and alignment identity (where applicable).",
+      "description": "Aggregated summary metrics of the filtering status of each read. Metrics displayed for each filtering status include count, median Q score, length, and alignment identity (where applicable).",
       "mime-type": "text/tsv",
       "optional": true,
       "type": "per-sample"

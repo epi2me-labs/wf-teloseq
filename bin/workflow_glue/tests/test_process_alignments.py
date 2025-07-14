@@ -9,7 +9,7 @@ from unittest.mock import Mock
 import numpy as np
 import pysam
 import pytest
-from workflow_glue.process_alignments import determine_haplotype, main, mean_quality
+from workflow_glue.process_alignments import determine_haplotype, main, mean_qscore
 
 
 SCRIPT_DIR = Path(__file__).parent
@@ -38,15 +38,15 @@ def test_mean_quality():
     # return tag value if present
     record = Mock()
     record.get_tag = Mock(return_value=5)
-    assert mean_quality(record) == 5
+    assert mean_qscore(record) == 5
 
     # redo calculation if tag not present
     record = Mock()
     record.get_tag = Mock(side_effect=KeyError("qs"))
     record.query_qualities = [10, 20, 30, 40, 50]
-    assert np.isnan(mean_quality(record, trim=10))  # trimmed away
-    assert np.isclose(mean_quality(record, trim=0), 16.5321, atol=0.001)  # all
-    assert np.isclose(mean_quality(record, trim=3), 42.5963, atol=0.001)  # 40, 50
+    assert np.isnan(mean_qscore(record, trim=10))  # trimmed away
+    assert np.isclose(mean_qscore(record, trim=0), 16.5321, atol=0.001)  # all
+    assert np.isclose(mean_qscore(record, trim=3), 42.5963, atol=0.001)  # 40, 50
 
 
 def test_main(tmp_path):
@@ -88,7 +88,7 @@ def test_main(tmp_path):
     qc_table_text = qc_tsv.read_text()
     assert "nan" not in qc_table_text
     expected_qc = (
-        "Status\tTotal reads\tMedian read length\tMedian quality\tMedian identity\n"
+        "Status\tTotal reads\tMedian read length\tMedian Q score\tMedian identity\n"
         "TooFewRepeats\t7\t4864\t20.92\t0.99\n"
         "StartNotRepeats\t54\t6958\t15.76\t0.99\n"
         "TooCloseStart\t1\t864\t24.48\t0.00\n"
