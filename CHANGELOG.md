@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v1.0.2]
+This patch release of `wf-teloseq` updates documentation to answer some frequently asked questions.
+
+### Changed
+- Updated documentation to include new Frequently Asked Questions.
+### Fixed
+- `store_dir` parameter format incorrectly declared in the schema. This does not affect this workflow as it does not use the storeDir directive and has been changed to maintain compliance with our latest testing standard.
+
 ## [v1.0.1]
 This patch release of `wf-teloseq` fixes several bugs found in report generation, but does not affect the determination of telomere repeat boundaries.
 
