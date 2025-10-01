@@ -1,4 +1,4 @@
-# Telomere sequencing workflow
+# Telo-Seq
 
 Nextflow pipeline for the analysis of telomeric sequence data generated with the Oxford Nanopore Telo-Seq protocol.
 
