@@ -2,7 +2,7 @@
     "$schema": "http://json-schema.org/draft-07/schema",
     "$id": "https://raw.githubusercontent.com/./master/nextflow_schema.json",
     "title": "epi2me-labs/wf-teloseq",
-    "workflow_title": "Telomere sequencing workflow",
+    "workflow_title": "Telo-Seq",
     "description": "Nextflow pipeline for the analysis of telomeric sequence data generated with the Oxford Nanopore Telo-Seq protocol.",
     "demo_url": "https://ont-exd-int-s3-euwst1-epi2me-labs.s3.amazonaws.com/wf-teloseq/wf-teloseq-demo.tar.gz",
     "aws_demo_url": "https://ont-exd-int-s3-euwst1-epi2me-labs.s3.amazonaws.com/wf-teloseq/wf-teloseq-demo/aws.nextflow.config",
