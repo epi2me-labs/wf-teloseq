@@ -2,22 +2,38 @@
 set -e
 
 usage() {
-    echo "Usage: $0 -m <model> -i <pod5_directory> -o <output_directory>"
-    echo "Valid models: 'hac', 'sup'"
+    echo "Usage: $0 -m <model> -i <pod5_directory> -o <output_directory> [ -d <path to dorado executable> ]"
     exit 1
 }
 
-while getopts ":m:i:o:" opt; do
+dorado="dorado"
+
+while getopts ":hm:i:o:d:" opt; do
     case ${opt} in
+        h) usage ;;
         m) model=$OPTARG ;;
         i) input=$OPTARG ;;
         o) output=$OPTARG ;;
-        *) usage ;;
+	d) dorado=$OPTARG ;;
+        *) echo "E: Unexpected option '$opt'."
+	   echo
+	   usage ;;
     esac
 done
 
 if [[ "$model" != "hac" && "$model" != "sup" ]]; then
+    echo "E: Invalid model '$model'. Valid models: 'hac', 'sup'"
+    echo
     usage
+fi
+
+if [ ! -e "$dorado" ] ; then
+    if ! command -v "$dorado" ; then
+	echo
+        echo "E: Cannot execute '$dorado'. Please consider using the -d option to specify its location."
+	echo
+	usage
+    fi
 fi
 
 tmp_dir=$(mktemp -d)
@@ -64,12 +80,12 @@ first_index = 1
 last_index = 12
 EOF
 
-dorado basecaller \
+"$dorado" basecaller \
 	--barcode-sequences "${tmp_dir}/teloseq_adapters.fasta" \
 	--barcode-arrangement "${tmp_dir}/teloseq.toml" \
 	--kit-name telo-seq --no-trim \
 	"${model}" "${input}" \
-	| dorado demux --no-classify --output-dir "${output}"
+	| "$dorado" demux --no-classify --output-dir "${output}"
 
 echo "Preparing output structure..."
 pushd "${output}"
