@@ -21,7 +21,7 @@ if [[ "$model" != "hac" && "$model" != "sup" ]]; then
 fi
 
 tmp_dir=$(mktemp -d)
-trap "rm -rf $tmp_dir" EXIT
+trap 'rm -rf "$tmp_dir"' EXIT
 
 cat << EOF > "$tmp_dir/teloseq_adapters.fasta"
 >TA01
@@ -74,9 +74,9 @@ dorado basecaller \
 echo "Preparing output structure..."
 pushd "${output}"
 for bc in {01..12}; do
-    mkdir barcode$bc
-    mv *barcode$bc.bam barcode$bc
+    mkdir "barcode$bc"
+    mv ./*barcode"$bc".bam "barcode$bc"
 done
 mkdir unclassified
-mv *unclassified.bam unclassified
+mv ./*unclassified.bam unclassified
 popd
