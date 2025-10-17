@@ -6,7 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [v1.0.3]
-This patch release of `wf-teloseq` updates the workflow title. It does not affect any workflow outputs.
+This patch release of `wf-teloseq` updates internal workflow naming, and does not affect any workflow outputs.
+### Changed
+- Updated `workflow_title` in `nextflow.config`.
 
 ## [v1.0.2]
 This patch release of `wf-teloseq` updates documentation to answer some frequently asked questions.
