@@ -1,11 +1,10 @@
-#!/bin/bash
-
+#!/usr/bin/env bash
 # Declare barcode array with corresponding read values
 declare -A barcode_map
 
-barcode_map["barcode01"]=$'Total reads\n10'
-barcode_map["barcode02"]=$'Total reads\n2\n8'
-barcode_map["barcode03"]=$'Total reads\n2\n8'
+barcode_map["barcode01"]=$'Total reads\n3\n7'
+barcode_map["barcode02"]=$'Total reads\n5\n5'
+barcode_map["barcode03"]=$'Total reads\n7\n3'
 barcode_map["barcode04"]=$'Total reads\n12'
 barcode_map["barcode05"]=$'Total reads\n2'
 barcode_map["barcode06"]=$'Total reads\n2'
