@@ -5,12 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [unreleased]
+## [v1.0.4]
+This patch release of `wf-teloseq` fixes small reporting discrepancies and adds more configuration to the basecaller helper script.
+Users of `wf-teloseq` v1.0.3 should adopt this release.
 
 ### Added
-* Ability to specify `dorado` executable to use in bin/basecalling.sh helper script.
+- Ability to specify `dorado` executable to use in bin/basecalling.sh helper script.
+
 ### Fixed
-* Some potential shell escaping issues in bin/basecalling.sh helper script.
+- Some potential shell escaping issues in bin/basecalling.sh helper script.
+- Fixed incorrect deduplication of multiple alignments, causing the numbers in the Filtering outcomes report table to be slightly incorrect.
+
+### Changed
+- Reads which do not align are now tagged as `BadAlign`, for clearer QC status reporting.
 
 ## [v1.0.3]
 This patch release of `wf-teloseq` updates internal workflow naming, and does not affect any workflow outputs.

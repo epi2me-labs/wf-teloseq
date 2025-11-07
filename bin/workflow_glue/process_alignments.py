@@ -84,7 +84,8 @@ def main(args):
             # Record if row is primary alignment
             is_primary = False
             # If the row is unmapped
-            is_unmapped = record.flag & pysam.FUNMAP
+            if record.is_unmapped:
+                record.set_tag("qc", "BadAlign", value_type="Z")
             # de tag is the gap-compressed identity as assigned by minimap2
             # see https://lh3.github.io/2018/11/25/on-the-definition-of-sequence-identity  # noqa: E501
             # Only check identity for Primary alignments
@@ -114,7 +115,7 @@ def main(args):
                     mean_qscore(record),
                     analyse,
                     is_primary,
-                    is_unmapped
+                    record.is_unmapped
                 )
             )
     # Make all reads into a dataframe.
@@ -190,12 +191,14 @@ def main(args):
     )
     # At this stage, we can have multiple rows per read in dataframe
     # (primary + supplementary alignments)
-    # Drop multiple read_ids, so we have one row per read for
-    # Query length and quality stats. Doesn't matter if the record is supplementary
-    # or primary, as the underlying query record is the same and that's what we
-    # are analysing below
+    # Take all Primary alignments and all unmapped reads, as this
+    # represents a single
+    # record per input read.
+    # NB we treat the primary alignment as the correct choice
+    # throughout the workflow.
+    # Unmapped is tagged as BadAlign.
     qc_df = (
-        qc_df.loc[~qc_df.index.duplicated(keep="first")]
+        df[(df["is_primary"]) | (df["is_unmapped"])]
         .groupby("qc", as_index=False)
         .agg(
             {
