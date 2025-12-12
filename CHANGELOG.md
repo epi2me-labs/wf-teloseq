@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [v1.0.4]
 This patch release of `wf-teloseq` fixes small reporting discrepancies and adds more configuration to the basecaller helper script.
+`wf-template` has been updated to remain inline with our internal workflow standard.
 Users of `wf-teloseq` v1.0.3 should adopt this release.
 
 ### Added
@@ -18,6 +19,10 @@ Users of `wf-teloseq` v1.0.3 should adopt this release.
 
 ### Changed
 - Reads which do not align are now tagged as `BadAlign`, for clearer QC status reporting.
+- Updated to wf-template v5.6.3 to maintain compliance with our latest wf-template standard, changing:
+  - Pipeline overview now appears before pipeline parameters in README.
+  - ezCharts plotting library has been updated to 0.15.1, there are no user facing changes to plots.
+  - Fastcat FASTQ pre-processing program has been updated to 0.24.2, it is more robust to malformed FASTQ input.
 
 ## [v1.0.3]
 This patch release of `wf-teloseq` updates internal workflow naming, and does not affect any workflow outputs.
