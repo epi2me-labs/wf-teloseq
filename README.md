@@ -134,75 +134,6 @@ input_reads.fastq   ─── input_directory  ─── input_directory
 
 
 
-## Input parameters
-
-### Input Options
-
-| Nextflow parameter name  | Type | Description | Help | Default |
-|--------------------------|------|-------------|------|---------|
-| fastq | string | FASTQ files to use in the analysis. | This accepts one of three cases: (i) the path to a single FASTQ file; (ii) the path to a top-level directory containing FASTQ files; (iii) the path to a directory containing one level of sub-directories which in turn contain FASTQ files. In the first and second case, a sample name can be supplied with `--sample`. In the last case, the data is assumed to be multiplexed with the names of the sub-directories as barcodes. In this case, a sample sheet can be provided with `--sample_sheet`. |  |
-| bam | string | BAM or unaligned BAM (uBAM) files to use in the analysis. | This accepts one of three cases: (i) the path to a single BAM file; (ii) the path to a top-level directory containing BAM files; (iii) the path to a directory containing one level of sub-directories which in turn contain BAM files. In the first and second case, a sample name can be supplied with `--sample`. In the last case, the data is assumed to be multiplexed with the names of the sub-directories as barcodes. In this case, a sample sheet can be provided with `--sample_sheet`. |  |
-| analyse_unclassified | boolean | Analyse unclassified reads from input directory. By default the workflow will not process reads in the unclassified directory. | If selected and if the input is a multiplex directory the workflow will also process the unclassified directory. | False |
-| reference | string | Reference genome of the sequenced sample, if not specified a human derived telomere reference set will be used. |  |  |
-
-
-### Sample Options
-
-| Nextflow parameter name  | Type | Description | Help | Default |
-|--------------------------|------|-------------|------|---------|
-| sample_sheet | string | A CSV file used to map barcodes to sample aliases. The sample sheet can be provided when the input data is a directory containing sub-directories with FASTQ files. | The sample sheet is a CSV file with, minimally, columns named `barcode` and `alias`. Extra columns are allowed. A `type` column is required for certain workflows and should have the following values; `test_sample`, `positive_control`, `negative_control`, `no_template_control`. |  |
-| sample | string | A single sample name for non-multiplexed data. Permissible if passing a single .FASTQ(.gz) file or directory of .FASTQ(.gz) files. |  |  |
-
-
-### TeloSeq Options
-
-| Nextflow parameter name  | Type | Description | Help | Default |
-|--------------------------|------|-------------|------|---------|
-| skip_mapping | boolean | Perform alignment to assign haplotypes to telomeric reads. | Use `--skip_mapping` if there is no suitable reference available. Only a bulk estimate of telomere lengths per sample will be calculated. | False |
-| alignment_threads | integer | Set max number of threads to use for alignment. |  | 6 |
-
-
-### Output Options
-
-| Nextflow parameter name  | Type | Description | Help | Default |
-|--------------------------|------|-------------|------|---------|
-| out_dir | string | Directory for output of all workflow results. |  | output |
-
-
-### Advanced Options
-
-| Nextflow parameter name  | Type | Description | Help | Default |
-|--------------------------|------|-------------|------|---------|
-| min_length | integer | Minimum read length for filtering. | Used in the initial filtering of reads into the workflow. Reads with a sequence length less than this will be removed prior to analysis, and will not be present in the output files. This removes all reads which are either noise, artifacts or partial, and which cannot be full telomeric sequences. Setting this number too high runs the risk of removing short telomeres. | 100 |
-| read_quality | integer | Minimum read Q score for filtering. | Reads with a mean quality score lower than this value will be filtered out prior to analysis, and will not be present in the output files. | 9 |
-
-
-
-
-
-
-## Outputs
-
-Output files may be aggregated including information for all samples or provided per sample. Per-sample files will be prefixed with respective aliases and represented below as {{ alias }}.
-
-| Title | File path | Description | Per sample or aggregated |
-|-------|-----------|-------------|--------------------------|
-| workflow report | wf-teloseq-report.html | Report for all samples. | aggregated |
-| Tool versions | versions.txt | A CSV with per row tool and version. | aggregated |
-| Parameters from workflow | params.json | A json of all parameters selected in workflow. | aggregated |
-| Unaligned, filtered and tagged sequences. | {{alias}}/unaligned_data/{{alias}}_filtered_telomeric.fastq | These sequences have been tagged (valid SAM format tags) on whether or not they passed filtering (qc:Z), and if detected, also tagged with the Telomere repeat boundary coordinates (tl:I). | per-sample |
-| Summary metrics about detected telomere lengths within the sample. | {{alias}}/stats/{{alias}}_telomere_unaligned_metrics.tsv | Aggregated summary metrics about reads which have passed all filtering, with a detected telomere repeat boundary. | per-sample |
-| Aligned, filtered and tagged sequences. | {{alias}}/aligned_data/{{alias}}_aligned_filtered_teloseqs.bam | Contains the sequences from the processed_fastq aligned to the provided reference. All sequences which passed initial read length (`--min_length`) and quality (`--read_quality`) filtering will be present, including unmapped. Only produced if alignment is performed. | per-sample |
-| Accompanying index for the aligned BAM. | {{alias}}/aligned_data/{{alias}}_aligned_filtered_teloseqs.bam.csi | Coordinate-sorted index file for the aligned data BAM. | per-sample |
-| Summary metrics about aligned telomere lengths within the sample. | {{alias}}/stats/{{alias}}_telomere_aligned_metrics.tsv | Aggregated summary metrics about detected telomere lengths within the sample, after alignment. Only reads which have primary alignments to the reference are considered. | per-sample |
-| Summary metrics about aligned telomere lengths grouped by target contig. | {{alias}}/stats/{{alias}}_contig_telomere_aligned_metrics.tsv | Aggregated summary metrics about detected telomere lengths within the sample, after alignment. The reads are grouped by target contig, and only reads which have primary alignments to the reference are considered. | per-sample |
-| Summary metrics about the filtering status of each read. | {{alias}}/stats/{{alias}}_qc_modes_metrics.tsv | Aggregated summary metrics of the filtering status of each read. Metrics displayed for each filtering status include count, median Q score, length, and alignment identity (where applicable). | per-sample |
-| Telomere length KDE data points. | {{alias}}/stats/{{alias}}_kde_data.tsv | Equally spaced data points drawn from a KDE. The KDE is drawn from the calculated telomere lengths. | per-sample |
-| Data points for drawing a boxplot from calculated telomere lengths. | {{alias}}/stats/{{alias}}_boxplot_values.tsv | Data points for drawing a boxplot from calculated telomere lengths for a single sample. Only provided if alignment is performed. Each row represents a contig, containing the minimum (greater than median - 1.5 * IQR), Q1, Median, Q3, and Max (smaller than median + 1.5 * IQR). | per-sample |
-
-
-
-
 ## Pipeline overview
 
 The workflow is composed of two steps. 
@@ -284,6 +215,75 @@ After this stage a tagged BAM file containing both mapped and unmapped reads is 
 
 
 
+## Input parameters
+
+### Input Options
+
+| Nextflow parameter name  | Type | Description | Help | Default |
+|--------------------------|------|-------------|------|---------|
+| fastq | string | FASTQ files to use in the analysis. | This accepts one of three cases: (i) the path to a single FASTQ file; (ii) the path to a top-level directory containing FASTQ files; (iii) the path to a directory containing one level of sub-directories which in turn contain FASTQ files. In the first and second case, a sample name can be supplied with `--sample`. In the last case, the data is assumed to be multiplexed with the names of the sub-directories as barcodes. In this case, a sample sheet can be provided with `--sample_sheet`. |  |
+| bam | string | BAM or unaligned BAM (uBAM) files to use in the analysis. | This accepts one of three cases: (i) the path to a single BAM file; (ii) the path to a top-level directory containing BAM files; (iii) the path to a directory containing one level of sub-directories which in turn contain BAM files. In the first and second case, a sample name can be supplied with `--sample`. In the last case, the data is assumed to be multiplexed with the names of the sub-directories as barcodes. In this case, a sample sheet can be provided with `--sample_sheet`. |  |
+| analyse_unclassified | boolean | Analyse unclassified reads from input directory. By default the workflow will not process reads in the unclassified directory. | If selected and if the input is a multiplex directory the workflow will also process the unclassified directory. | False |
+| reference | string | Reference genome of the sequenced sample, if not specified a human derived telomere reference set will be used. |  |  |
+
+
+### Sample Options
+
+| Nextflow parameter name  | Type | Description | Help | Default |
+|--------------------------|------|-------------|------|---------|
+| sample_sheet | string | A CSV file used to map barcodes to sample aliases. The sample sheet can be provided when the input data is a directory containing sub-directories with FASTQ files. | The sample sheet is a CSV file with, minimally, columns named `barcode` and `alias`. Extra columns are allowed. A `type` column is required for certain workflows and should have the following values; `test_sample`, `positive_control`, `negative_control`, `no_template_control`. |  |
+| sample | string | A single sample name for non-multiplexed data. Permissible if passing a single .FASTQ(.gz) file or directory of .FASTQ(.gz) files. |  |  |
+
+
+### TeloSeq Options
+
+| Nextflow parameter name  | Type | Description | Help | Default |
+|--------------------------|------|-------------|------|---------|
+| skip_mapping | boolean | Perform alignment to assign haplotypes to telomeric reads. | Use `--skip_mapping` if there is no suitable reference available. Only a bulk estimate of telomere lengths per sample will be calculated. | False |
+| alignment_threads | integer | Set max number of threads to use for alignment. |  | 6 |
+
+
+### Output Options
+
+| Nextflow parameter name  | Type | Description | Help | Default |
+|--------------------------|------|-------------|------|---------|
+| out_dir | string | Directory for output of all workflow results. |  | output |
+
+
+### Advanced Options
+
+| Nextflow parameter name  | Type | Description | Help | Default |
+|--------------------------|------|-------------|------|---------|
+| min_length | integer | Minimum read length for filtering. | Used in the initial filtering of reads into the workflow. Reads with a sequence length less than this will be removed prior to analysis, and will not be present in the output files. This removes all reads which are either noise, artifacts or partial, and which cannot be full telomeric sequences. Setting this number too high runs the risk of removing short telomeres. | 100 |
+| read_quality | integer | Minimum read Q score for filtering. | Reads with a mean quality score lower than this value will be filtered out prior to analysis, and will not be present in the output files. | 9 |
+
+
+
+
+
+
+## Outputs
+
+Output files may be aggregated including information for all samples or provided per sample. Per-sample files will be prefixed with respective aliases and represented below as {{ alias }}.
+
+| Title | File path | Description | Per sample or aggregated |
+|-------|-----------|-------------|--------------------------|
+| workflow report | wf-teloseq-report.html | Report for all samples. | aggregated |
+| Tool versions | versions.txt | A CSV with per row tool and version. | aggregated |
+| Parameters from workflow | params.json | A json of all parameters selected in workflow. | aggregated |
+| Unaligned, filtered and tagged sequences. | {{alias}}/unaligned_data/{{alias}}_filtered_telomeric.fastq | These sequences have been tagged (valid SAM format tags) on whether or not they passed filtering (qc:Z), and if detected, also tagged with the Telomere repeat boundary coordinates (tl:I). | per-sample |
+| Summary metrics about detected telomere lengths within the sample. | {{alias}}/stats/{{alias}}_telomere_unaligned_metrics.tsv | Aggregated summary metrics about reads which have passed all filtering, with a detected telomere repeat boundary. | per-sample |
+| Aligned, filtered and tagged sequences. | {{alias}}/aligned_data/{{alias}}_aligned_filtered_teloseqs.bam | Contains the sequences from the processed_fastq aligned to the provided reference. All sequences which passed initial read length (`--min_length`) and quality (`--read_quality`) filtering will be present, including unmapped. Only produced if alignment is performed. | per-sample |
+| Accompanying index for the aligned BAM. | {{alias}}/aligned_data/{{alias}}_aligned_filtered_teloseqs.bam.csi | Coordinate-sorted index file for the aligned data BAM. | per-sample |
+| Summary metrics about aligned telomere lengths within the sample. | {{alias}}/stats/{{alias}}_telomere_aligned_metrics.tsv | Aggregated summary metrics about detected telomere lengths within the sample, after alignment. Only reads which have primary alignments to the reference are considered. | per-sample |
+| Summary metrics about aligned telomere lengths grouped by target contig. | {{alias}}/stats/{{alias}}_contig_telomere_aligned_metrics.tsv | Aggregated summary metrics about detected telomere lengths within the sample, after alignment. The reads are grouped by target contig, and only reads which have primary alignments to the reference are considered. | per-sample |
+| Summary metrics about the filtering status of each read. | {{alias}}/stats/{{alias}}_qc_modes_metrics.tsv | Aggregated summary metrics of the filtering status of each read. Metrics displayed for each filtering status include count, median Q score, length, and alignment identity (where applicable). | per-sample |
+| Telomere length KDE data points. | {{alias}}/stats/{{alias}}_kde_data.tsv | Equally spaced data points drawn from a KDE. The KDE is drawn from the calculated telomere lengths. | per-sample |
+| Data points for drawing a boxplot from calculated telomere lengths. | {{alias}}/stats/{{alias}}_boxplot_values.tsv | Data points for drawing a boxplot from calculated telomere lengths for a single sample. Only provided if alignment is performed. Each row represents a contig, containing the minimum (greater than median - 1.5 * IQR), Q1, Median, Q3, and Max (smaller than median + 1.5 * IQR). | per-sample |
+
+
+
+
 ## Troubleshooting
 
 <!---Any additional tips.--->
@@ -292,7 +292,7 @@ After this stage a tagged BAM file containing both mapped and unmapped reads is 
 
 
 
-## FAQ's
+## FAQs
 
 <!---Frequently asked questions, pose any known limitations as FAQ's.--->
 
