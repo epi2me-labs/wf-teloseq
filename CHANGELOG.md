@@ -6,7 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [v1.0.4]
-This patch release of `wf-teloseq` fixes small reporting discrepancies and adds more configuration to the basecaller helper script.
+This patch release of `wf-teloseq` fixes small reporting discrepancies and adds more configuration to the basecaller helper script, and support for discrepancies across dorado versions.
 `wf-template` has been updated to remain inline with our internal workflow standard.
 Users of `wf-teloseq` v1.0.3 should adopt this release.
 
@@ -15,6 +15,7 @@ Users of `wf-teloseq` v1.0.3 should adopt this release.
 
 ### Fixed
 - Some potential shell escaping issues in bin/basecalling.sh helper script.
+- Updated bin/basecalling.sh helper script to support Dorado v1.3.0 CLI changes, while maintaining compatibility with earlier versions of Dorado.
 - Fixed incorrect deduplication of multiple alignments, causing the numbers in the Filtering outcomes report table to be slightly incorrect.
 
 ### Changed
