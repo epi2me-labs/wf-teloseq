@@ -19,7 +19,7 @@ Users of `wf-teloseq` v1.0.3 should adopt this release.
 
 ### Changed
 - Reads which do not align are now tagged as `BadAlign`, for clearer QC status reporting.
-- Updated to wf-template v5.6.3 to maintain compliance with our latest wf-template standard, changing:
+- Updated to wf-template v5.7.0 to maintain compliance with our latest wf-template standard, changing:
   - Pipeline overview now appears before pipeline parameters in README.
   - ezCharts plotting library has been updated to 0.15.1, there are no user facing changes to plots.
   - Fastcat FASTQ pre-processing program has been updated to 0.24.2, it is more robust to malformed FASTQ input.
