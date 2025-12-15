@@ -95,19 +95,72 @@ first_index = 1
 last_index = 12
 EOF
 
-"$dorado" basecaller \
-	--barcode-sequences "${tmp_dir}/teloseq_adapters.fasta" \
-	--barcode-arrangement "${tmp_dir}/teloseq.toml" \
-	--kit-name telo-seq --no-trim \
-	"${model}" "${input}" \
-	| "$dorado" demux --no-classify --output-dir "${output}"
+echo "Using dorado executable: $dorado"
+# Get dorado version (e.g. "1.3.0+6ea400189")
+version_str=$("$dorado" --version 2>&1)
+echo "Dorado version string: ${version_str:-unknown}"
+version_num=$(printf '%s\n' "$version_str" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n1)
+echo "Dorado version: ${version_num:-unknown}"
 
-echo "Preparing output structure..."
-pushd "${output}"
-for bc in {01..12}; do
-    mkdir "barcode$bc"
-    mv ./*barcode"$bc".bam "barcode$bc"
-done
-mkdir unclassified
-mv ./*unclassified.bam unclassified
-popd
+# dorado >= 1.2.0 cannot read demux input from stdin, and has a different output format
+demux_needs_file=false
+if [ -n "$version_num" ]; then
+    if [ "$(printf '1.2.0\n%s\n' "$version_num" | sort -V | head -n1)" = "1.2.0" ]; then
+        demux_needs_file=true
+    fi
+fi
+
+# dorado demux --no-classify doesn't work in v1.2.0
+if [ "$version_num" = "1.2.0" ]; then
+    echo "Error: dorado v1.2.0 has a known issue with 'demux --no-classify'. Please upgrade dorado to v1.3.0 or later." >&2
+    exit 1
+fi
+
+echo "Creating output directory: ${output}"
+mkdir -p "${output}"
+
+basecaller_cmd=(
+    "$dorado" basecaller
+    --barcode-sequences "${tmp_dir}/teloseq_adapters.fasta"
+    --barcode-arrangement "${tmp_dir}/teloseq.toml"
+    --kit-name telo-seq
+    --no-trim
+    "${model}" "${input}"
+)
+echo "Running basecalling and demultiplexing..."
+
+if [ "$demux_needs_file" = false ]; then
+    echo "Using dorado version $version_num: demux can read from stream"
+    "${basecaller_cmd[@]}" \
+        | "$dorado" demux --no-classify --output-dir "${output}"
+
+    echo "Preparing output structure..."
+    pushd "${output}"
+    for bc in {01..12}; do
+        mkdir "barcode$bc"
+        mv ./*barcode"$bc".bam "barcode$bc"
+    done
+    mkdir unclassified
+    mv ./*unclassified.bam unclassified
+    popd
+else
+    echo "Using dorado version $version_num: demux requires intermediate file"
+    tmp_bam="${output}/mixed.tmp.bam"
+    "${basecaller_cmd[@]}" > "${tmp_bam}"
+
+    "$dorado" demux \
+        --no-classify \
+        --output-dir "${output}" \
+        "${tmp_bam}"
+    rm -f "${tmp_bam}"
+
+    # output for later dorado versions is MinKNOW like
+    echo "Preparing output structure..."
+    pushd "${output}"
+    mv ./*/*/bam_pass/* .
+    for bc in {01..12}; do
+        mv telo-seq_barcode"$bc" "barcode$bc"
+    done
+    # rm anything not barcodeXX or unclassified
+    find . -maxdepth 1 ! -name 'barcode*' ! -name 'unclassified' ! -name '.' -exec rm -rf {} +
+fi
